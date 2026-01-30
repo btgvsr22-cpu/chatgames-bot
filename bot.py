@@ -29,7 +29,7 @@ sentences = [
 "The dangerous nether fortress almost made me die",
  "The wither boss destroyed the obsidian arena",
  "I crafted enchanted diamond armor",
-"A piston door failed during the raid”,
+"A piston door failed during the raid",
  "Players escaped the nether fortress alive",
 "Redstone circuits powered the secret base",
 "The server crashed after massive lag",
@@ -159,6 +159,7 @@ async def clearleaderboard(ctx):
 
 # ---------------- RUN BOT ----------------
 bot.run(os.getenv("DISCORD_TOKEN"))
+
 
 
 
