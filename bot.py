@@ -18,6 +18,40 @@ sentences = [
     "the ender dragon lives in the end",
     "villagers trade emeralds",
     "nether portals need obsidian"
+    “A creeper destroyed a massive redstone contraption underground”,
+ “The ender dragon was defeated after many failed attempts”,
+ “I lost all my items in lava after stepping in the nether”,
+“A hidden stronghold was found deep underground”,
+“The complex redstone system failed suddenly during a live stream”,
+“I built a fully automated nether farm without getting detected”,
+ “The villager trader gave terrible trades that nobody enjoyed”,
+“A lonely player survived the nether without armor”,
+“The dangerous nether fortress almost made me die”,
+ “The wither boss destroyed the obsidian arena”,
+ “I crafted enchanted diamond armor”,
+“A piston door failed during the raid”,
+ “Players escaped the nether fortress alive”,
+“Redstone circuits powered the secret base”,
+“The server crashed after massive lag”,
+“The wither boss destroyed the obsidian arena underground”,
+“I built a fully automated redstone contraption underground”,
+“The ender dragon was defeated after many failed attempts”,
+“A lonely player survived a long night in the nether”,
+“The complex redstone system failed suddenly during a raid”,
+“I lost all my items in lava after stepping in the nether”,
+“The player built a hidden base underground”,
+“A creeper exploded near the village”,
+“The ender dragon destroyed the portal”,
+ “I lost all my items in lava”,
+ “Villagers offered terrible trades”,
+ “The player explored a deep cave full of mobs”,
+ “A wither boss spawned in the village”,
+“The redstone contraption required precise timing”,
+“I crafted a fully enchanted diamond pickaxe”,
+ “The nether portal broke during teleportation”,
+ “A piston door worked perfectly in the base”,
+ “The villager breeder produced good emeralds”,
+“I lost my shield after fighting a skeleton”,
 ]
 
 game_running = False
@@ -125,5 +159,6 @@ async def clearleaderboard(ctx):
 
 # ---------------- RUN BOT ----------------
 bot.run(os.getenv("DISCORD_TOKEN"))
+
 
 
