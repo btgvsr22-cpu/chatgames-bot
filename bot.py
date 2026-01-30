@@ -156,9 +156,23 @@ async def leaderboard(ctx):
 async def clearleaderboard(ctx):
     save_points({})
     await ctx.send("🗑️ Leaderboard has been cleared.")
+# ---------------- STOP GAME ----------------
+@bot.command()
+async def stop(ctx):
+    global game_running, current_answer
+
+    if not game_running:
+        await ctx.send("❌ There is no game running right now.")
+        return
+
+    game_running = False
+    current_answer = None
+
+    await ctx.send("🛑 **The game has been stopped.**")
 
 # ---------------- RUN BOT ----------------
 bot.run(os.getenv("DISCORD_TOKEN"))
+
 
 
 
