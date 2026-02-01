@@ -6,7 +6,7 @@ import random
 import sqlite3
 
 # ================= CONFIG =================
-TOKEN = os.getenv("DISCORD_TOKEN")  # Railway environment variable
+TOKEN = os.getenv("DISCORD_TOKEN")
 
 VERIFIED_ROLE_ID = 1467128845093175397
 NON_VERIFIED_ROLE_ID = 1467128749987336386
@@ -71,8 +71,13 @@ def load_config(key):
     row = c.fetchone()
     return int(row[0]) if row else None
 
+def save_message_id(msg_id):
+    save_config("verify_message", msg_id)
+
+def load_message_id():
+    return load_config("verify_message")
+
 # ================= VERIFICATION DATA =================
-verify_channel_id = load_config("verify_channel")
 captcha_answers = {}
 
 # ================= GAME DATA =================
@@ -83,41 +88,41 @@ sentences = [
     "diamond armor is very rare",
     "the ender dragon lives in the end",
     "villagers trade emeralds",
-    "nether portals need obsidian"
+    "nether portals need obsidian",
     "A creeper destroyed a massive redstone contraption underground",
- "The ender dragon was defeated after many failed attempts",
- "I lost all my items in lava after stepping in the nether",
-"A hidden stronghold was found deep underground",
-"The complex redstone system failed suddenly during a live stream",
-"I built a fully automated nether farm without getting detected",
- "The villager trader gave terrible trades that nobody enjoyed",
-"A lonely player survived the nether without armor",
-"The dangerous nether fortress almost made me die",
- "The wither boss destroyed the obsidian arena",
- "I crafted enchanted diamond armor",
-"A piston door failed during the raid",
- "Players escaped the nether fortress alive",
-"Redstone circuits powered the secret base",
-"The server crashed after massive lag",
-"The wither boss destroyed the obsidian arena underground",
-"I built a fully automated redstone contraption underground",
-"The ender dragon was defeated after many failed attempts",
-"A lonely player survived a long night in the nether",
-"The complex redstone system failed suddenly during a raid",
-"I lost all my items in lava after stepping in the nether",
-"The player built a hidden base underground",
-"A creeper exploded near the village",
-"The ender dragon destroyed the portal",
- "I lost all my items in lava",
- "Villagers offered terrible trades",
- "The player explored a deep cave full of mobs",
- "A wither boss spawned in the village",
-"The redstone contraption required precise timing",
-"I crafted a fully enchanted diamond pickaxe",
- "The nether portal broke during teleportation",
- "A piston door worked perfectly in the base",
- "The villager breeder produced good emeralds",
-"I lost my shield after fighting a skeleton",
+    "The ender dragon was defeated after many failed attempts",
+    "I lost all my items in lava after stepping in the nether",
+    "A hidden stronghold was found deep underground",
+    "The complex redstone system failed suddenly during a live stream",
+    "I built a fully automated nether farm without getting detected",
+    "The villager trader gave terrible trades that nobody enjoyed",
+    "A lonely player survived the nether without armor",
+    "The dangerous nether fortress almost made me die",
+    "The wither boss destroyed the obsidian arena",
+    "I crafted enchanted diamond armor",
+    "A piston door failed during the raid",
+    "Players escaped the nether fortress alive",
+    "Redstone circuits powered the secret base",
+    "The server crashed after massive lag",
+    "The wither boss destroyed the obsidian arena underground",
+    "I built a fully automated redstone contraption underground",
+    "The ender dragon was defeated after many failed attempts",
+    "A lonely player survived a long night in the nether",
+    "The complex redstone system failed suddenly during a raid",
+    "I lost all my items in lava after stepping in the nether",
+    "The player built a hidden base underground",
+    "A creeper exploded near the village",
+    "The ender dragon destroyed the portal",
+    "I lost all my items in lava",
+    "Villagers offered terrible trades",
+    "The player explored a deep cave full of mobs",
+    "A wither boss spawned in the village",
+    "The redstone contraption required precise timing",
+    "I crafted a fully enchanted diamond pickaxe",
+    "The nether portal broke during teleportation",
+    "A piston door worked perfectly in the base",
+    "The villager breeder produced good emeralds",
+    "I lost my shield after fighting a skeleton",
 ]
 
 game_running = False
@@ -128,43 +133,18 @@ def scramble_and_invert(sentence):
     random.shuffle(words)
     return " ".join(word[::-1] for word in words)
 
-# ================= READY =================
-@bot.event
-async def on_ready():
-    print(f"✅ Bot online as {bot.user}")
-
-# ================= MEMBER JOIN =================
-@bot.event
-async def on_member_join(member):
-    account_age = (datetime.now(timezone.utc) - member.created_at).days
-
-    if account_age < MIN_ACCOUNT_AGE_DAYS:
-        await member.ban(reason="Account too new (anti-alt)")
-        return
-
-    non_verified = member.guild.get_role(NON_VERIFIED_ROLE_ID)
-    if non_verified:
-        await member.add_roles(non_verified)
-
-    if verify_channel_id:
-        channel = member.guild.get_channel(verify_channel_id)
-        if channel:
-            await channel.send(
-                f"{member.mention} click below to verify 👇",
-                view=VerifyView(member.id)
-            )
-
 # ================= VERIFY UI =================
 class VerifyView(discord.ui.View):
-    def __init__(self, user_id):
-        super().__init__(timeout=300)
-        self.user_id = user_id
+    def __init__(self):
+        super().__init__(timeout=None)
 
     @discord.ui.button(label="Verify", style=discord.ButtonStyle.success)
     async def verify(self, interaction: discord.Interaction, _):
-        if interaction.user.id != self.user_id:
+
+        verified = interaction.guild.get_role(VERIFIED_ROLE_ID)
+        if verified in interaction.user.roles:
             await interaction.response.send_message(
-                "❌ This button is not for you.",
+                "✅ You are already verified.",
                 ephemeral=True
             )
             return
@@ -180,6 +160,13 @@ class CaptchaModal(discord.ui.Modal, title="Verification CAPTCHA"):
         self.add_item(self.answer)
 
     async def on_submit(self, interaction: discord.Interaction):
+        if interaction.user.id not in captcha_answers:
+            await interaction.response.send_message(
+                "⚠️ Verification expired. Click Verify again.",
+                ephemeral=True
+            )
+            return
+
         if self.answer.value.strip() == captcha_answers.get(interaction.user.id):
             await interaction.user.add_roles(
                 interaction.guild.get_role(VERIFIED_ROLE_ID)
@@ -191,28 +178,57 @@ class CaptchaModal(discord.ui.Modal, title="Verification CAPTCHA"):
         else:
             await interaction.response.send_message("❌ Wrong answer.", ephemeral=True)
 
-# ================= VERIFICATION COMMANDS =================
+# ================= VERIFY PANEL =================
+async def post_verify_panel(guild):
+    channel_id = load_config("verify_channel")
+    if not channel_id:
+        return
+
+    channel = guild.get_channel(channel_id)
+    if not channel:
+        return
+
+    msg_id = load_message_id()
+    if msg_id:
+        try:
+            await channel.fetch_message(msg_id)
+            return
+        except:
+            pass
+
+    msg = await channel.send(
+        "🔐 **Server Verification**\nClick the button below to verify 👇",
+        view=VerifyView()
+    )
+    save_message_id(msg.id)
+
+# ================= READY =================
+@bot.event
+async def on_ready():
+    print(f"✅ Bot online as {bot.user}")
+    for guild in bot.guilds:
+        await post_verify_panel(guild)
+
+# ================= MEMBER JOIN =================
+@bot.event
+async def on_member_join(member):
+    account_age = (datetime.now(timezone.utc) - member.created_at).days
+
+    if account_age < MIN_ACCOUNT_AGE_DAYS:
+        await member.ban(reason="Account too new (anti-alt)")
+        return
+
+    role = member.guild.get_role(NON_VERIFIED_ROLE_ID)
+    if role:
+        await member.add_roles(role)
+
+# ================= VERIFICATION COMMAND =================
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def setverifychannel(ctx, channel: discord.TextChannel):
-    global verify_channel_id
-    verify_channel_id = channel.id
-    save_config("verify_channel", verify_channel_id)
+    save_config("verify_channel", channel.id)
+    await post_verify_panel(ctx.guild)
     await ctx.send(f"✅ Verification channel set to {channel.mention}")
-
-@bot.command()
-@commands.has_permissions(manage_roles=True)
-async def verify(ctx, member: discord.Member):
-    await member.add_roles(ctx.guild.get_role(VERIFIED_ROLE_ID))
-    await member.remove_roles(ctx.guild.get_role(NON_VERIFIED_ROLE_ID))
-    await ctx.send(f"✅ {member.mention} verified.")
-
-@bot.command()
-@commands.has_permissions(manage_roles=True)
-async def unverify(ctx, member: discord.Member):
-    await member.remove_roles(ctx.guild.get_role(VERIFIED_ROLE_ID))
-    await member.add_roles(ctx.guild.get_role(NON_VERIFIED_ROLE_ID))
-    await ctx.send(f"⚠️ {member.mention} unverified.")
 
 # ================= CHAT GAME =================
 @bot.command()
@@ -284,3 +300,4 @@ async def stop(ctx):
 
 # ================= RUN =================
 bot.run(TOKEN)
+
