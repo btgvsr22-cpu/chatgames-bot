@@ -1,3 +1,4 @@
+import os
 import discord
 from discord.ext import commands
 from datetime import datetime, timezone
@@ -5,7 +6,7 @@ import random
 import sqlite3
 
 # ================= CONFIG =================
-TOKEN = "PUT_YOUR_BOT_TOKEN_HERE"
+TOKEN = os.getenv("DISCORD_TOKEN")  # Railway environment variable
 
 VERIFIED_ROLE_ID = 1467128845093175397
 NON_VERIFIED_ROLE_ID = 1467128749987336386
@@ -21,18 +22,23 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="*", intents=intents)
 
 # ================= DATABASE =================
-conn = sqlite3.connect(DB_FILE)
+conn = sqlite3.connect(DB_FILE, check_same_thread=False)
 c = conn.cursor()
 
-# Create tables if they don't exist
-c.execute("""CREATE TABLE IF NOT EXISTS points (
-                user_id TEXT PRIMARY KEY,
-                score INTEGER
-            )""")
-c.execute("""CREATE TABLE IF NOT EXISTS config (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            )""")
+c.execute("""
+CREATE TABLE IF NOT EXISTS points (
+    user_id TEXT PRIMARY KEY,
+    score INTEGER
+)
+""")
+
+c.execute("""
+CREATE TABLE IF NOT EXISTS config (
+    key TEXT PRIMARY KEY,
+    value TEXT
+)
+""")
+
 conn.commit()
 
 def get_points(user_id):
@@ -42,7 +48,10 @@ def get_points(user_id):
 
 def add_point(user_id):
     score = get_points(user_id) + 1
-    c.execute("INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)", (str(user_id), score))
+    c.execute(
+        "INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)",
+        (str(user_id), score)
+    )
     conn.commit()
     return score
 
@@ -51,7 +60,10 @@ def clear_points():
     conn.commit()
 
 def save_config(key, value):
-    c.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", (key, str(value)))
+    c.execute(
+        "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
+        (key, str(value))
+    )
     conn.commit()
 
 def load_config(key):
@@ -65,7 +77,7 @@ captcha_answers = {}
 
 # ================= GAME DATA =================
 sentences = [
-     "creeper aw man",
+    "creeper aw man",
     "never dig straight down",
     "minecraft is a sandbox game",
     "diamond armor is very rare",
@@ -130,9 +142,9 @@ async def on_member_join(member):
         await member.ban(reason="Account too new (anti-alt)")
         return
 
-    role = member.guild.get_role(NON_VERIFIED_ROLE_ID)
-    if role:
-        await member.add_roles(role)
+    non_verified = member.guild.get_role(NON_VERIFIED_ROLE_ID)
+    if non_verified:
+        await member.add_roles(non_verified)
 
     if verify_channel_id:
         channel = member.guild.get_channel(verify_channel_id)
@@ -151,7 +163,10 @@ class VerifyView(discord.ui.View):
     @discord.ui.button(label="Verify", style=discord.ButtonStyle.success)
     async def verify(self, interaction: discord.Interaction, _):
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message("❌ Not for you.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ This button is not for you.",
+                ephemeral=True
+            )
             return
 
         a, b = random.randint(1, 10), random.randint(1, 10)
@@ -203,14 +218,19 @@ async def unverify(ctx, member: discord.Member):
 @bot.command()
 async def startgame(ctx):
     global game_running, current_answer
+
     if game_running:
-        return await ctx.send("⚠️ Game already running.")
+        return await ctx.send("⚠️ A game is already running.")
 
     sentence = random.choice(sentences)
     current_answer = sentence.lower()
     game_running = True
 
-    await ctx.send(f"🎮 **CHAT GAME**\n🧩 `{scramble_and_invert(sentence)}`")
+    await ctx.send(
+        f"🎮 **CHAT GAME**\n"
+        f"Unscramble & fix the words:\n"
+        f"🧩 `{scramble_and_invert(sentence)}`"
+    )
 
 @bot.event
 async def on_message(message):
@@ -224,7 +244,8 @@ async def on_message(message):
         score = add_point(message.author.id)
 
         await message.channel.send(
-            f"🏆 {message.author.mention} WON!\n⭐ Points: {score}"
+            f"🏆 {message.author.mention} WON!\n"
+            f"⭐ Points: {score}"
         )
         current_answer = None
 
@@ -234,16 +255,18 @@ async def on_message(message):
 async def leaderboard(ctx):
     c.execute("SELECT user_id, score FROM points ORDER BY score DESC LIMIT 10")
     rows = c.fetchall()
+
     if not rows:
         return await ctx.send("❌ No scores yet.")
 
-    text = "🏆 **LEADERBOARD**\n"
+    text = "🏆 **LEADERBOARD** 🏆\n"
     for i, (uid, score) in enumerate(rows, 1):
         try:
             user = await bot.fetch_user(int(uid))
             text += f"{i}. {user.name} — {score}\n"
         except:
             pass
+
     await ctx.send(text)
 
 @bot.command()
@@ -261,10 +284,3 @@ async def stop(ctx):
 
 # ================= RUN =================
 bot.run(TOKEN)
-
-
-
-
-
-
-
