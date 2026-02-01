@@ -298,6 +298,29 @@ async def stop(ctx):
     current_answer = None
     await ctx.send("🛑 Game stopped.")
 
+# ================= ADMIN POINT COMMANDS =================
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def givepoints(ctx, member: discord.Member, amount: int):
+    new_score = get_points(member.id) + amount
+    c.execute("INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)", (str(member.id), new_score))
+    conn.commit()
+    await ctx.send(f"✅ Added {amount} points to {member.mention}. New total: {new_score}")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def removepoints(ctx, member: discord.Member, amount: int):
+    new_score = max(0, get_points(member.id) - amount)
+    c.execute("INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)", (str(member.id), new_score))
+    conn.commit()
+    await ctx.send(f"📉 Removed {amount} points from {member.mention}. New total: {new_score}")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def setpoints(ctx, member: discord.Member, amount: int):
+    c.execute("INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)", (str(member.id), amount))
+    conn.commit()
+    await ctx.send(f"🎯 Set {member.mention}'s points to {amount}")
+
 # ================= RUN =================
 bot.run(TOKEN)
-
