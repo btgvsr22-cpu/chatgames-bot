@@ -1,17 +1,71 @@
-import os
 import discord
 from discord.ext import commands
+from datetime import datetime, timezone
 import random
-import json
+import sqlite3
 
-# ---------------- BOT SETUP ----------------
+# ================= CONFIG =================
+TOKEN = "PUT_YOUR_BOT_TOKEN_HERE"
+
+VERIFIED_ROLE_ID = 1467128845093175397
+NON_VERIFIED_ROLE_ID = 1467128749987336386
+
+MIN_ACCOUNT_AGE_DAYS = 20
+DB_FILE = "bot_data.db"
+# =========================================
+
 intents = discord.Intents.default()
+intents.members = True
 intents.message_content = True
+
 bot = commands.Bot(command_prefix="*", intents=intents)
 
-# ---------------- GAME DATA ----------------
+# ================= DATABASE =================
+conn = sqlite3.connect(DB_FILE)
+c = conn.cursor()
+
+# Create tables if they don't exist
+c.execute("""CREATE TABLE IF NOT EXISTS points (
+                user_id TEXT PRIMARY KEY,
+                score INTEGER
+            )""")
+c.execute("""CREATE TABLE IF NOT EXISTS config (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )""")
+conn.commit()
+
+def get_points(user_id):
+    c.execute("SELECT score FROM points WHERE user_id = ?", (str(user_id),))
+    row = c.fetchone()
+    return row[0] if row else 0
+
+def add_point(user_id):
+    score = get_points(user_id) + 1
+    c.execute("INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)", (str(user_id), score))
+    conn.commit()
+    return score
+
+def clear_points():
+    c.execute("DELETE FROM points")
+    conn.commit()
+
+def save_config(key, value):
+    c.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", (key, str(value)))
+    conn.commit()
+
+def load_config(key):
+    c.execute("SELECT value FROM config WHERE key = ?", (key,))
+    row = c.fetchone()
+    return int(row[0]) if row else None
+
+# ================= VERIFICATION DATA =================
+verify_channel_id = load_config("verify_channel")
+captcha_answers = {}
+
+# ================= GAME DATA =================
 sentences = [
-    "creeper aw man",
+     "creeper aw man",
     "never dig straight down",
     "minecraft is a sandbox game",
     "diamond armor is very rare",
@@ -56,54 +110,108 @@ sentences = [
 
 game_running = False
 current_answer = None
-points_file = "points.json"
 
-# ---------------- POINTS SYSTEM ----------------
-def load_points():
-    try:
-        with open(points_file, "r") as f:
-            return json.load(f)
-    except:
-        return {}
-
-def save_points(points):
-    with open(points_file, "w") as f:
-        json.dump(points, f, indent=4)
-
-# ---------------- SCRAMBLE + INVERT ----------------
 def scramble_and_invert(sentence):
     words = sentence.split()
-    random.shuffle(words)              # scramble word order
-    inverted = [word[::-1] for word in words]  # invert each word
-    return " ".join(inverted)
+    random.shuffle(words)
+    return " ".join(word[::-1] for word in words)
 
-# ---------------- READY ----------------
+# ================= READY =================
 @bot.event
 async def on_ready():
     print(f"✅ Bot online as {bot.user}")
 
-# ---------------- START GAME (MANUAL) ----------------
+# ================= MEMBER JOIN =================
+@bot.event
+async def on_member_join(member):
+    account_age = (datetime.now(timezone.utc) - member.created_at).days
+
+    if account_age < MIN_ACCOUNT_AGE_DAYS:
+        await member.ban(reason="Account too new (anti-alt)")
+        return
+
+    role = member.guild.get_role(NON_VERIFIED_ROLE_ID)
+    if role:
+        await member.add_roles(role)
+
+    if verify_channel_id:
+        channel = member.guild.get_channel(verify_channel_id)
+        if channel:
+            await channel.send(
+                f"{member.mention} click below to verify 👇",
+                view=VerifyView(member.id)
+            )
+
+# ================= VERIFY UI =================
+class VerifyView(discord.ui.View):
+    def __init__(self, user_id):
+        super().__init__(timeout=300)
+        self.user_id = user_id
+
+    @discord.ui.button(label="Verify", style=discord.ButtonStyle.success)
+    async def verify(self, interaction: discord.Interaction, _):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Not for you.", ephemeral=True)
+            return
+
+        a, b = random.randint(1, 10), random.randint(1, 10)
+        captcha_answers[interaction.user.id] = str(a + b)
+        await interaction.response.send_modal(CaptchaModal(a, b))
+
+class CaptchaModal(discord.ui.Modal, title="Verification CAPTCHA"):
+    def __init__(self, a, b):
+        super().__init__()
+        self.answer = discord.ui.TextInput(label=f"{a} + {b} = ?", required=True)
+        self.add_item(self.answer)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if self.answer.value.strip() == captcha_answers.get(interaction.user.id):
+            await interaction.user.add_roles(
+                interaction.guild.get_role(VERIFIED_ROLE_ID)
+            )
+            await interaction.user.remove_roles(
+                interaction.guild.get_role(NON_VERIFIED_ROLE_ID)
+            )
+            await interaction.response.send_message("✅ Verified!", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ Wrong answer.", ephemeral=True)
+
+# ================= VERIFICATION COMMANDS =================
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def setverifychannel(ctx, channel: discord.TextChannel):
+    global verify_channel_id
+    verify_channel_id = channel.id
+    save_config("verify_channel", verify_channel_id)
+    await ctx.send(f"✅ Verification channel set to {channel.mention}")
+
+@bot.command()
+@commands.has_permissions(manage_roles=True)
+async def verify(ctx, member: discord.Member):
+    await member.add_roles(ctx.guild.get_role(VERIFIED_ROLE_ID))
+    await member.remove_roles(ctx.guild.get_role(NON_VERIFIED_ROLE_ID))
+    await ctx.send(f"✅ {member.mention} verified.")
+
+@bot.command()
+@commands.has_permissions(manage_roles=True)
+async def unverify(ctx, member: discord.Member):
+    await member.remove_roles(ctx.guild.get_role(VERIFIED_ROLE_ID))
+    await member.add_roles(ctx.guild.get_role(NON_VERIFIED_ROLE_ID))
+    await ctx.send(f"⚠️ {member.mention} unverified.")
+
+# ================= CHAT GAME =================
 @bot.command()
 async def startgame(ctx):
     global game_running, current_answer
-
     if game_running:
-        await ctx.send("⚠️ A game is already running!")
-        return
+        return await ctx.send("⚠️ Game already running.")
 
     sentence = random.choice(sentences)
-    scrambled = scramble_and_invert(sentence)
-
     current_answer = sentence.lower()
     game_running = True
 
-    await ctx.send(
-        f"🎮 **MINECRAFT CHAT GAME**\n"
-        f"Unscramble AND fix the inverted words:\n\n"
-        f"🧩 `{scrambled}`"
-    )
+    await ctx.send(f"🎮 **CHAT GAME**\n🧩 `{scramble_and_invert(sentence)}`")
 
-# ---------------- MESSAGE CHECK ----------------
 @bot.event
 async def on_message(message):
     global game_running, current_answer
@@ -113,65 +221,47 @@ async def on_message(message):
 
     if game_running and message.content.lower() == current_answer:
         game_running = False
-
-        points = load_points()
-        uid = str(message.author.id)
-        points[uid] = points.get(uid, 0) + 1
-        save_points(points)
+        score = add_point(message.author.id)
 
         await message.channel.send(
-            f"🏆 **{message.author.mention} WON!**\n"
-            f"✅ Correct sentence:\n`{current_answer}`\n"
-            f"⭐ Points: {points[uid]}"
+            f"🏆 {message.author.mention} WON!\n⭐ Points: {score}"
         )
-
         current_answer = None
 
     await bot.process_commands(message)
 
-# ---------------- LEADERBOARD ----------------
 @bot.command()
 async def leaderboard(ctx):
-    points = load_points()
+    c.execute("SELECT user_id, score FROM points ORDER BY score DESC LIMIT 10")
+    rows = c.fetchall()
+    if not rows:
+        return await ctx.send("❌ No scores yet.")
 
-    if not points:
-        await ctx.send("❌ Leaderboard is empty.")
-        return
-
-    sorted_points = sorted(points.items(), key=lambda x: x[1], reverse=True)
-
-    text = "🏆 **LEADERBOARD** 🏆\n"
-    for i, (uid, score) in enumerate(sorted_points[:10], start=1):
+    text = "🏆 **LEADERBOARD**\n"
+    for i, (uid, score) in enumerate(rows, 1):
         try:
             user = await bot.fetch_user(int(uid))
-            text += f"{i}. {user.name} — {score} points\n"
+            text += f"{i}. {user.name} — {score}\n"
         except:
             pass
-
     await ctx.send(text)
 
-# ---------------- CLEAR LEADERBOARD ----------------
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def clearleaderboard(ctx):
-    save_points({})
-    await ctx.send("🗑️ Leaderboard has been cleared.")
-# ---------------- STOP GAME ----------------
+    clear_points()
+    await ctx.send("🗑️ Leaderboard cleared.")
+
 @bot.command()
 async def stop(ctx):
     global game_running, current_answer
-
-    if not game_running:
-        await ctx.send("❌ There is no game running right now.")
-        return
-
     game_running = False
     current_answer = None
+    await ctx.send("🛑 Game stopped.")
 
-    await ctx.send("🛑 **The game has been stopped.**")
+# ================= RUN =================
+bot.run(TOKEN)
 
-# ---------------- RUN BOT ----------------
-bot.run(os.getenv("DISCORD_TOKEN"))
 
 
 
