@@ -19,68 +19,12 @@ intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
 
-bot = commands.Bot(command_prefix="*", intents=intents)
+bot = commands.Bot(command_prefix="*", intents=intents, help_command=None)
 
-# ================= DATABASE =================
-conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-c = conn.cursor()
+# ================= GLOBALS =================
+game_running = False
+current_answer = None
 
-c.execute("""
-CREATE TABLE IF NOT EXISTS points (
-    user_id TEXT PRIMARY KEY,
-    score INTEGER
-)
-""")
-
-c.execute("""
-CREATE TABLE IF NOT EXISTS config (
-    key TEXT PRIMARY KEY,
-    value TEXT
-)
-""")
-
-conn.commit()
-
-def get_points(user_id):
-    c.execute("SELECT score FROM points WHERE user_id = ?", (str(user_id),))
-    row = c.fetchone()
-    return row[0] if row else 0
-
-def add_point(user_id):
-    score = get_points(user_id) + 1
-    c.execute(
-        "INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)",
-        (str(user_id), score)
-    )
-    conn.commit()
-    return score
-
-def clear_points():
-    c.execute("DELETE FROM points")
-    conn.commit()
-
-def save_config(key, value):
-    c.execute(
-        "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
-        (key, str(value))
-    )
-    conn.commit()
-
-def load_config(key):
-    c.execute("SELECT value FROM config WHERE key = ?", (key,))
-    row = c.fetchone()
-    return int(row[0]) if row else None
-
-def save_message_id(msg_id):
-    save_config("verify_message", msg_id)
-
-def load_message_id():
-    return load_config("verify_message")
-
-# ================= VERIFICATION DATA =================
-captcha_answers = {}
-
-# ================= GAME DATA =================
 sentences = [
     "creeper aw man",
     "never dig straight down",
@@ -123,108 +67,109 @@ sentences = [
     "A piston door worked perfectly in the base",
     "The villager breeder produced good emeralds",
     "I lost my shield after fighting a skeleton",
+
+
 ]
 
-game_running = False
-current_answer = None
-
 def scramble_and_invert(sentence):
-    words = sentence.split()
-    random.shuffle(words)
-    return " ".join(word[::-1] for word in words)
+    return " ".join(sentence.split()[::-1])
 
-# ================= VERIFY UI =================
-class VerifyView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
+# ================= DATABASE =================
+conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+c = conn.cursor()
 
-    @discord.ui.button(label="Verify", style=discord.ButtonStyle.success)
-    async def verify(self, interaction: discord.Interaction, _):
+c.execute("""
+CREATE TABLE IF NOT EXISTS points (
+    user_id TEXT PRIMARY KEY,
+    score INTEGER
+)
+""")
 
-        verified = interaction.guild.get_role(VERIFIED_ROLE_ID)
-        if verified in interaction.user.roles:
-            await interaction.response.send_message(
-                "✅ You are already verified.",
-                ephemeral=True
-            )
-            return
+c.execute("""
+CREATE TABLE IF NOT EXISTS config (
+    key TEXT PRIMARY KEY,
+    value TEXT
+)
+""")
 
-        a, b = random.randint(1, 10), random.randint(1, 10)
-        captcha_answers[interaction.user.id] = str(a + b)
-        await interaction.response.send_modal(CaptchaModal(a, b))
+conn.commit()
 
-class CaptchaModal(discord.ui.Modal, title="Verification CAPTCHA"):
-    def __init__(self, a, b):
-        super().__init__()
-        self.answer = discord.ui.TextInput(label=f"{a} + {b} = ?", required=True)
-        self.add_item(self.answer)
+def safe_commit():
+    try:
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
 
-    async def on_submit(self, interaction: discord.Interaction):
-        if interaction.user.id not in captcha_answers:
-            await interaction.response.send_message(
-                "⚠️ Verification expired. Click Verify again.",
-                ephemeral=True
-            )
-            return
+def get_points(user_id):
+    c.execute("SELECT score FROM points WHERE user_id = ?", (str(user_id),))
+    row = c.fetchone()
+    return row[0] if row else 0
 
-        if self.answer.value.strip() == captcha_answers.get(interaction.user.id):
-            await interaction.user.add_roles(
-                interaction.guild.get_role(VERIFIED_ROLE_ID)
-            )
-            await interaction.user.remove_roles(
-                interaction.guild.get_role(NON_VERIFIED_ROLE_ID)
-            )
-            await interaction.response.send_message("✅ Verified!", ephemeral=True)
-        else:
-            await interaction.response.send_message("❌ Wrong answer.", ephemeral=True)
-
-# ================= VERIFY PANEL =================
-async def post_verify_panel(guild):
-    channel_id = load_config("verify_channel")
-    if not channel_id:
-        return
-
-    channel = guild.get_channel(channel_id)
-    if not channel:
-        return
-
-    msg_id = load_message_id()
-    if msg_id:
-        try:
-            await channel.fetch_message(msg_id)
-            return
-        except:
-            pass
-
-    msg = await channel.send(
-        "🔐 **Server Verification**\nClick the button below to verify 👇",
-        view=VerifyView()
+def add_point(user_id):
+    score = get_points(user_id) + 1
+    c.execute(
+        "INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)",
+        (str(user_id), score)
     )
-    save_message_id(msg.id)
+    safe_commit()
+    return score
 
-# ================= READY =================
-@bot.event
-async def on_ready():
-    print(f"✅ Bot online as {bot.user}")
-    for guild in bot.guilds:
-        await post_verify_panel(guild)
+def clear_points():
+    c.execute("DELETE FROM points")
+    safe_commit()
 
-# ================= MEMBER JOIN =================
+def save_config(key, value):
+    c.execute(
+        "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
+        (key, str(value))
+    )
+    safe_commit()
+
+def load_config(key):
+    c.execute("SELECT value FROM config WHERE key = ?", (key,))
+    row = c.fetchone()
+    return int(row[0]) if row else None
+
+def save_message_id(msg_id):
+    save_config("verify_message", msg_id)
+
+# ================= GLOBAL ADMIN CHECK =================
+@bot.check
+async def admin_only(ctx):
+    if ctx.guild is None:
+        return False
+
+    if ctx.author.guild_permissions.administrator:
+        return True
+
+    await ctx.reply(
+        "🚫 **You don’t have permission to use this command.**\n"
+        "🔒 Admin access required.",
+        mention_author=False
+    )
+    return False
+
+# ================= EVENTS =================
 @bot.event
 async def on_member_join(member):
     account_age = (datetime.now(timezone.utc) - member.created_at).days
 
     if account_age < MIN_ACCOUNT_AGE_DAYS:
-        await member.ban(reason="Account too new (anti-alt)")
+        try:
+            await member.ban(reason="Account too new (anti-alt)")
+        except discord.Forbidden:
+            pass
         return
 
     role = member.guild.get_role(NON_VERIFIED_ROLE_ID)
     if role:
-        await member.add_roles(role)
+        try:
+            await member.add_roles(role)
+        except discord.Forbidden:
+            pass
 
 # ================= VERIFICATION COMMAND =================
 @bot.command()
-@commands.has_permissions(administrator=True)
 async def setverifychannel(ctx, channel: discord.TextChannel):
     save_config("verify_channel", channel.id)
     await post_verify_panel(ctx.guild)
@@ -286,7 +231,6 @@ async def leaderboard(ctx):
     await ctx.send(text)
 
 @bot.command()
-@commands.has_permissions(administrator=True)
 async def clearleaderboard(ctx):
     clear_points()
     await ctx.send("🗑️ Leaderboard cleared.")
@@ -298,29 +242,70 @@ async def stop(ctx):
     current_answer = None
     await ctx.send("🛑 Game stopped.")
 
-# ================= ADMIN POINT COMMANDS =================
+# ================= POINT COMMANDS =================
 @bot.command()
-@commands.has_permissions(administrator=True)
 async def givepoints(ctx, member: discord.Member, amount: int):
     new_score = get_points(member.id) + amount
-    c.execute("INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)", (str(member.id), new_score))
-    conn.commit()
+    c.execute(
+        "INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)",
+        (str(member.id), new_score)
+    )
+    safe_commit()
     await ctx.send(f"✅ Added {amount} points to {member.mention}. New total: {new_score}")
 
 @bot.command()
-@commands.has_permissions(administrator=True)
 async def removepoints(ctx, member: discord.Member, amount: int):
     new_score = max(0, get_points(member.id) - amount)
-    c.execute("INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)", (str(member.id), new_score))
-    conn.commit()
+    c.execute(
+        "INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)",
+        (str(member.id), new_score)
+    )
+    safe_commit()
     await ctx.send(f"📉 Removed {amount} points from {member.mention}. New total: {new_score}")
 
 @bot.command()
-@commands.has_permissions(administrator=True)
 async def setpoints(ctx, member: discord.Member, amount: int):
-    c.execute("INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)", (str(member.id), amount))
-    conn.commit()
+    c.execute(
+        "INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)",
+        (str(member.id), amount)
+    )
+    safe_commit()
     await ctx.send(f"🎯 Set {member.mention}'s points to {amount}")
 
+# ================= HELP =================
+@bot.command()
+async def help(ctx):
+    await ctx.send(
+        "**📖 BOT COMMANDS (Admin Only)**\n\n"
+        "**Verification**\n"
+        "`*setverifychannel #channel` → Set verification channel\n\n"
+        "**Chat Game**\n"
+        "`*startgame` → Start game\n"
+        "`*stop` → Stop game\n\n"
+        "**Points**\n"
+        "`*leaderboard`\n"
+        "`*clearleaderboard`\n"
+        "`*givepoints @user amount`\n"
+        "`*removepoints @user amount`\n"
+        "`*setpoints @user amount`\n\n"
+        "🔒 Administrator permission required"
+    )
+
+# ================= ERROR HANDLER =================
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        return
+    if isinstance(error, commands.BadArgument):
+        await ctx.send("⚠️ Invalid arguments. Check `*help`.")
+        return
+    if isinstance(error, commands.CommandNotFound):
+        return
+    raise error
+
 # ================= RUN =================
+if not TOKEN:
+    raise RuntimeError("DISCORD_TOKEN environment variable not set")
+
 bot.run(TOKEN)
+
