@@ -210,6 +210,13 @@ async def lb(ctx):
         msg += f"**{i}.** <@{u_id}> → `{score}`\n"
     await ctx.send(msg)
 
+@bot.command()
+@has_game_role()
+async def clearlb(ctx):
+    c.execute("DELETE FROM points")
+    conn.commit()
+    await ctx.send("🧹 Leaderboard cleared successfully.")
+
 # ================= MESSAGE LISTENER =================
 @bot.event
 async def on_message(message):
@@ -229,3 +236,4 @@ async def on_message(message):
     await bot.process_commands(message)
 
 bot.run(TOKEN)
+
