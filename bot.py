@@ -1,7 +1,6 @@
 import os
 import discord
 from discord.ext import commands
-from datetime import datetime, timezone
 import random
 import sqlite3
 import re
@@ -18,7 +17,7 @@ DB_FILE = "bot_data.db"
 # =========================================
 
 intents = discord.Intents.default()
-intents.members = True  # Required for on_member_join
+intents.members = True  # Required for auto-role on join
 intents.message_content = True
 
 bot = commands.Bot(command_prefix="*", intents=intents, help_command=None)
@@ -36,7 +35,7 @@ sentences = [
     "While building my base a skeleton kept shooting from far away",
     "The ender dragon fight became intense as endermen surrounded the area",
     "I spent the night protecting villagers from zombies and pillagers",
-    "After falling into a video I escaped using water and blocks",
+    "After falling into a ravine I escaped using water and blocks",
     "The redstone machine stopped working and flooded my underground base",
     "I traveled very far just to find a jungle biome",
     "While building a bridge in the nether I almost fell into lava",
@@ -81,7 +80,6 @@ sentences = [
 
 # ================= REVERSE FUNCTION =================
 def reverse_sentence(sentence):
-    # Reverses the entire string: "Hello World" -> "dlroW olleH"
     return sentence[::-1]
 
 # ================= ROLE CHECK =================
@@ -97,118 +95,5 @@ c.execute("CREATE TABLE IF NOT EXISTS points (user_id TEXT PRIMARY KEY, score IN
 c.execute("CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT)")
 conn.commit()
 
-def get_points(user_id):
-    c.execute("SELECT score FROM points WHERE user_id = ?", (str(user_id),))
-    row = c.fetchone()
-    return row[0] if row else 0
-
 def add_point(user_id):
-    score = get_points(user_id) + 1
-    c.execute("INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)", (str(user_id), score))
-    conn.commit()
-    return score
-
-# ================= AUTO-ROLE ON JOIN =================
-@bot.event
-async def on_member_join(member):
-    role = member.guild.get_role(NON_VERIFIED_ROLE_ID)
-    if role:
-        try:
-            await member.add_roles(role)
-        except discord.Forbidden:
-            print(f"FAILED to add role to {member.name}. Check role hierarchy!")
-
-# ================= GAME COMMANDS =================
-@bot.command()
-@has_game_role()
-async def startgame(ctx):
-    global game_running, current_answer
-    if game_running:
-        return await ctx.send("⚠️ A game is already running.")
-
-    c.execute("SELECT value FROM config WHERE key = ?", ("game_channel",))
-    row = c.fetchone()
-    if not row:
-        return await ctx.send("❌ Game channel not set. Use `*setgamechannel #channel`.")
-
-    channel = ctx.guild.get_channel(int(row[0]))
-    game_running = True
-    current_answer = random.choice(sentences)
-    
-    await channel.send(f"🎮 **New Game Started!**\nUnscramble (Reverse) this sentence:\n`{reverse_sentence(current_answer)}`")
-
-@bot.command()
-@has_game_role()
-async def stopgame(ctx):
-    global game_running, current_answer
-    game_running = False
-    current_answer = None
-    await ctx.send("🛑 Game stopped.")
-
-# ================= LEADERBOARD =================
-@bot.command(name="lb")
-async def leaderboard(ctx):
-    c.execute("SELECT user_id, score FROM points ORDER BY score DESC LIMIT 10")
-    rows = c.fetchall()
-    if not rows:
-        return await ctx.send("📭 Leaderboard is empty.")
-
-    msg = "**🏆 LEADERBOARD (Top 10)**\n\n"
-    for i, (u_id, score) in enumerate(rows, start=1):
-        msg += f"**{i}.** <@{u_id}> → `{score}` points\n"
-    await ctx.send(msg)
-
-# ================= VERIFICATION SETUP =================
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def setverifychannel(ctx, channel: discord.TextChannel):
-    class VerifyButton(discord.ui.View):
-        def __init__(self):
-            super().__init__(timeout=None)
-        @discord.ui.button(label="Verify", style=discord.ButtonStyle.green)
-        async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
-            captcha_text = "".join(random.choices(string.ascii_letters + string.digits, k=5))
-            
-            class CaptchaModal(discord.ui.Modal, title="Complete Captcha"):
-                answer = discord.ui.TextInput(label=f"Type: {captcha_text}")
-                async def on_submit(self, itn: discord.Interaction):
-                    if self.answer.value.strip() == captcha_text:
-                        await itn.user.add_roles(itn.guild.get_role(VERIFIED_ROLE_ID))
-                        await itn.user.remove_roles(itn.guild.get_role(NON_VERIFIED_ROLE_ID))
-                        await itn.response.send_message("✅ Verified!", ephemeral=True)
-                    else:
-                        await itn.response.send_message("❌ Wrong captcha.", ephemeral=True)
-            await interaction.response.send_modal(CaptchaModal())
-
-    await channel.send("🔒 Click to verify!", view=VerifyButton())
-    await ctx.send(f"✅ Setup in {channel.mention}")
-
-@bot.command()
-@has_game_role()
-async def setgamechannel(ctx, channel: discord.TextChannel):
-    c.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("game_channel", str(channel.id)))
-    conn.commit()
-    await ctx.send(f"✅ Game channel: {channel.mention}")
-
-# ================= MESSAGE LISTENER =================
-@bot.event
-async def on_message(message):
-    global game_running, current_answer
-    if message.author.bot: return
-
-    if game_running and current_answer:
-        c.execute("SELECT value FROM config WHERE key = ?", ("game_channel",))
-        row = c.fetchone()
-        if row and message.channel.id == int(row[0]):
-            
-            def normalize(t): return re.sub(r"[^\w\s]", "", t.lower()).strip()
-
-            if normalize(message.content) == normalize(current_answer):
-                score = add_point(message.author.id)
-                await message.channel.send(f"🎉 {message.author.mention} got it! Total: {score}")
-                game_running = False
-                current_answer = None
-
-    await bot.process_commands(message)
-
-bot.run(TOKEN)
+    c.execute("SELECT score FROM points WHERE user_id = ?", (str(
