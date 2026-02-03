@@ -17,7 +17,7 @@ DB_FILE = "bot_data.db"
 # =========================================
 
 intents = discord.Intents.default()
-intents.members = True  # Required for auto-role on join
+intents.members = True
 intents.message_content = True
 
 bot = commands.Bot(command_prefix="*", intents=intents, help_command=None)
@@ -143,6 +143,32 @@ async def setverifychannel(ctx, channel: discord.TextChannel):
 
     await channel.send("🔒 Click the button below to verify!", view=VerifyButton())
     await ctx.send(f"✅ Verification setup in {channel.mention}")
+
+# ================= ADMIN POINT COMMANDS =================
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def clearlb(ctx):
+    c.execute("DELETE FROM points")
+    conn.commit()
+    await ctx.send("🗑️ **Leaderboard has been cleared!** All points are back to 0.")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def setpoints(ctx, member: discord.Member, amount: int):
+    c.execute("INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)", (str(member.id), amount))
+    conn.commit()
+    await ctx.send(f"🎯 Set {member.mention}'s points to `{amount}`.")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def givepoints(ctx, member: discord.Member, amount: int):
+    c.execute("SELECT score FROM points WHERE user_id = ?", (str(member.id),))
+    row = c.fetchone()
+    current = row[0] if row else 0
+    new_total = current + amount
+    c.execute("INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)", (str(member.id), new_total))
+    conn.commit()
+    await ctx.send(f"✅ Added `{amount}` points to {member.mention}. New total: `{new_total}`.")
 
 # ================= GAME COMMANDS =================
 @bot.command()
