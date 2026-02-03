@@ -4,6 +4,8 @@ from discord.ext import commands
 from datetime import datetime, timezone
 import random
 import sqlite3
+import re
+import string
 
 # ================= CONFIG =================
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -85,14 +87,13 @@ def scramble_and_invert(sentence):
     scrambled_words = []
 
     for word in words:
-        if len(word) > 1:  # only scramble if word has more than 1 letter
+        if len(word) > 1:
             letters = list(word)
             random.shuffle(letters)
             scrambled_words.append("".join(letters))
         else:
             scrambled_words.append(word)
 
-    # invert word order
     return " ".join(scrambled_words[::-1])
 
 # ================= ROLE CHECK =================
@@ -201,19 +202,140 @@ async def leaderboard(ctx):
 
     await ctx.send(msg)
 
-# ================= HELP (ROLE ONLY) =================
+# ================= GAME CHANNEL + VERIFICATION COMMANDS =================
+@bot.command()
+@has_game_role()
+async def setgamechannel(ctx, channel: discord.TextChannel):
+    c.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("game_channel", str(channel.id)))
+    safe_commit()
+    await ctx.send(f"✅ Game channel set to {channel.mention}")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def setverifychannel(ctx, channel: discord.TextChannel):
+    c.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("verify_channel", str(channel.id)))
+    safe_commit()
+    await ctx.send(f"✅ Verification channel set to {channel.mention}")
+
+    class VerifyButton(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=None)
+
+        @discord.ui.button(label="Verify", style=discord.ButtonStyle.green)
+        async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
+            captcha_text = "".join(random.choices(string.ascii_letters + string.digits, k=5))
+
+            class CaptchaModal(discord.ui.Modal):
+                def __init__(self):
+                    super().__init__(title="Complete Captcha")
+                    self.captcha_input = discord.ui.TextInput(
+                        label=f"Type the captcha: {captcha_text}",
+                        placeholder="Enter exactly as shown",
+                        max_length=10
+                    )
+                    self.add_item(self.captcha_input)
+
+                async def on_submit(self, modal_interaction: discord.Interaction):
+                    member = modal_interaction.user
+                    guild = modal_interaction.guild
+                    verified_role = guild.get_role(VERIFIED_ROLE_ID)
+                    non_verified_role = guild.get_role(NON_VERIFIED_ROLE_ID)
+
+                    if self.captcha_input.value.strip() == captcha_text:
+                        if verified_role:
+                            await member.add_roles(verified_role)
+                        if non_verified_role:
+                            await member.remove_roles(non_verified_role)
+                        await modal_interaction.response.send_message("✅ Verified successfully!", ephemeral=True)
+                    else:
+                        await modal_interaction.response.send_message("❌ Incorrect captcha. Try again.", ephemeral=True)
+
+            await interaction.response.send_modal(CaptchaModal())
+
+    await channel.send("🔒 Click the button below to verify yourself!", view=VerifyButton())
+
+# ================= GAME START/STOP (Game Manager only) =================
+@bot.command()
+@has_game_role()
+async def startgame(ctx):
+    global game_running, current_answer
+    if game_running:
+        await ctx.send("⚠️ A game is already running.")
+        return
+
+    c.execute("SELECT value FROM config WHERE key = ?", ("game_channel",))
+    row = c.fetchone()
+    if not row:
+        await ctx.send("❌ Game channel not set. Use `*setgamechannel #channel` first.")
+        return
+
+    channel_id = int(row[0])
+    channel = ctx.guild.get_channel(channel_id)
+    if not channel:
+        await ctx.send("❌ The configured game channel is invalid.")
+        return
+
+    game_running = True
+    current_answer = random.choice(sentences)
+    scrambled = scramble_and_invert(current_answer)
+    await channel.send(f"🎮 **New Game Started!**\nUnscramble this sentence:\n`{scrambled}`")
+
+@bot.command()
+@has_game_role()
+async def stopgame(ctx):
+    global game_running, current_answer
+    if not game_running:
+        await ctx.send("⚠️ No game is currently running.")
+        return
+    game_running = False
+    current_answer = None
+    await ctx.send("🛑 Game stopped.")
+
+# ================= HELP (Game Manager only) =================
 @bot.command()
 @has_game_role()
 async def help(ctx):
     await ctx.send(
         "**📖 BOT COMMANDS (Game Manager Only)**\n\n"
         "**🎮 Chat Game**\n"
-        "`*startgame` → Start game\n"
-        "`*stop` → Stop game\n\n"
+        "`*startgame` → Start a new chat game\n"
+        "`*stopgame` → Stop the current chat game\n\n"
         "**🏆 Leaderboard**\n"
-        "`*lb` → View leaderboard\n\n"
+        "`*lb` → View top 10 leaderboard\n\n"
         "🔒 Access restricted to Game Manager role"
     )
+
+# ================= GAME MESSAGE LISTENER WITH POINTS =================
+@bot.event
+async def on_message(message):
+    global game_running, current_answer
+
+    if message.author.bot:
+        return
+
+    if game_running and current_answer:
+        c.execute("SELECT value FROM config WHERE key = ?", ("game_channel",))
+        row = c.fetchone()
+        if row:
+            game_channel_id = int(row[0])
+            if message.channel.id == game_channel_id:
+
+                def normalize(text):
+                    text = text.lower()
+                    text = re.sub(r"[^\w\s]", "", text)
+                    text = re.sub(r"\s+", " ", text).strip()
+                    return text
+
+                if normalize(message.content) == normalize(current_answer):
+                    new_score = add_point(message.author.id)
+                    await message.channel.send(
+                        f"🎉 {message.author.mention} guessed it correctly and earned 1 point! Total: {new_score}"
+                    )
+                    game_running = False
+                    current_answer = None
+                    return
+
+    await bot.process_commands(message)
 
 # ================= ERROR HANDLER =================
 @bot.event
@@ -235,5 +357,3 @@ if not TOKEN:
     raise RuntimeError("DISCORD_TOKEN environment variable not set")
 
 bot.run(TOKEN)
-
-
