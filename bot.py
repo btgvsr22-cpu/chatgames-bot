@@ -184,6 +184,14 @@ async def setpoints(ctx, member: discord.Member, amount: int):
     safe_commit()
     await ctx.send(f"🎯 Set {member.mention}'s points to {amount}")
 
+# ================= CLEAR LEADERBOARD (ADMIN) =================
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def clearlb(ctx):
+    c.execute("DELETE FROM points")
+    safe_commit()
+    await ctx.send("🗑️ Leaderboard has been cleared!")
+
 # ================= LEADERBOARD (PUBLIC) =================
 @bot.command(name="lb")
 async def leaderboard(ctx):
