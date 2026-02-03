@@ -29,7 +29,7 @@ bot = commands.Bot(command_prefix="*", intents=intents, help_command=None)
 game_running = False
 current_answer = None
 
-# ================= SENTENCES (UPDATED) =================
+# ================= SENTENCES =================
 sentences = [
     "I was mining deep underground when a creeper exploded and scared me badly",
     "After exploring caves for a long time I finally found diamonds",
@@ -81,20 +81,10 @@ sentences = [
     "I finally beat the game after many tries"
 ]
 
-# ================= SCRAMBLE + INVERT FUNCTION =================
-def scramble_and_invert(sentence):
-    words = sentence.split()
-    scrambled_words = []
-
-    for word in words:
-        if len(word) > 1:
-            letters = list(word)
-            random.shuffle(letters)
-            scrambled_words.append("".join(letters))
-        else:
-            scrambled_words.append(word)
-
-    return " ".join(scrambled_words[::-1])
+# ================= REVERSE FUNCTION (NEW) =================
+def reverse_sentence(sentence):
+    # This reverses the entire string (e.g., "Hello World" -> "dlroW olleH")
+    return sentence[::-1]
 
 # ================= ROLE CHECK =================
 def has_game_role():
@@ -262,7 +252,7 @@ async def setverifychannel(ctx, channel: discord.TextChannel):
 
     await channel.send("🔒 Click the button below to verify yourself!", view=VerifyButton())
 
-# ================= GAME START/STOP (Game Manager only) =================
+# ================= GAME START/STOP =================
 @bot.command()
 @has_game_role()
 async def startgame(ctx):
@@ -285,8 +275,10 @@ async def startgame(ctx):
 
     game_running = True
     current_answer = random.choice(sentences)
-    scrambled = scramble_and_invert(current_answer)
-    await channel.send(f"🎮 **New Game Started!**\nUnscramble this sentence:\n`{scrambled}`")
+    # Applying the new full-sentence reversal here:
+    reversed_text = reverse_sentence(current_answer)
+    
+    await channel.send(f"🎮 **New Game Started!**\nUnscramble this sentence:\n`{reversed_text}`")
 
 @bot.command()
 @has_game_role()
@@ -299,7 +291,7 @@ async def stopgame(ctx):
     current_answer = None
     await ctx.send("🛑 Game stopped.")
 
-# ================= HELP (Game Manager only) =================
+# ================= HELP =================
 @bot.command()
 @has_game_role()
 async def help(ctx):
@@ -313,7 +305,7 @@ async def help(ctx):
         "🔒 Access restricted to Game Manager role"
     )
 
-# ================= GAME MESSAGE LISTENER WITH POINTS =================
+# ================= MESSAGE LISTENER =================
 @bot.event
 async def on_message(message):
     global game_running, current_answer
