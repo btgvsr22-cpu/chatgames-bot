@@ -209,6 +209,22 @@ async def lb(ctx):
     for i, (u_id, score) in enumerate(rows, 1):
         msg += f"**{i}.** <@{u_id}> → `{score}`\n"
     await ctx.send(msg)
+@bot.command()
+async def help(ctx):
+    msg = (
+        "**🤖 BOT COMMAND HELP**\n\n"
+        "**👑 Admin Commands**\n"
+        "`*setverifychannel #channel` → Set verification channel\n"
+        "`*givepoints @user amount` → Add points to a user\n\n"
+        "**🎮 Game Manager Commands**\n"
+        "`*setgamechannel #channel` → Set game channel\n"
+        "`*startgame` → Start the game\n"
+        "`*stopgame` → Stop the game\n"
+        "`*clearlb` → Clear leaderboard (if added)\n\n"
+        "**👤 Public Commands**\n"
+        "`*lb` → Show leaderboard\n"
+    )
+    await ctx.send(msg)
 
 
 
@@ -231,5 +247,6 @@ async def on_message(message):
     await bot.process_commands(message)
 
 bot.run(TOKEN)
+
 
 
