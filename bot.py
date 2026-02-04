@@ -4,14 +4,12 @@ from discord.ext import commands
 import random
 import sqlite3
 import re
-import string
 
 # ================= CONFIG =================
 TOKEN = os.getenv("DISCORD_TOKEN")
 
-VERIFIED_ROLE_ID = 1467128845093175397
-NON_VERIFIED_ROLE_ID = 1467128749987336386
 GAME_MANAGER_ROLE_ID = 1468173295760314473
+OWNER_ID = 1448709644091527363  # YOUR DISCORD ID
 
 DB_FILE = "bot_data.db"
 # =========================================
@@ -20,7 +18,12 @@ intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
 
-bot = commands.Bot(command_prefix="*", intents=intents, help_command=None)
+bot = commands.Bot(
+    command_prefix="*",
+    intents=intents,
+    help_command=None,
+    activity=discord.Game(name="NEXUS Chat Game")
+)
 
 # ================= GLOBALS =================
 game_running = False
@@ -76,147 +79,180 @@ sentences = [
     "The villagers panicked as zombies attacked",
     "I explored a snowy biome for resources",
     "I finally beat the game after many tries"
+
+
 ]
 
-# ================= REVERSE FUNCTION =================
+# ================= HELPERS =================
 def reverse_sentence(sentence):
     return sentence[::-1]
 
-# ================= ROLE CHECK =================
 def has_game_role():
     async def predicate(ctx):
         return any(role.id == GAME_MANAGER_ROLE_ID for role in ctx.author.roles)
     return commands.check(predicate)
 
-# ================= DATABASE SETUP =================
+# ================= DATABASE =================
 conn = sqlite3.connect(DB_FILE, check_same_thread=False)
 c = conn.cursor()
+
 c.execute("CREATE TABLE IF NOT EXISTS points (user_id TEXT PRIMARY KEY, score INTEGER)")
 c.execute("CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT)")
 conn.commit()
 
-def add_point(user_id):
+def add_point(user_id, amount=1):
     c.execute("SELECT score FROM points WHERE user_id = ?", (str(user_id),))
     row = c.fetchone()
-    score = (row[0] if row else 0) + 1
-    c.execute("INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)", (str(user_id), score))
+    new_score = (row[0] if row else 0) + amount
+    c.execute(
+        "INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)",
+        (str(user_id), new_score)
+    )
     conn.commit()
-    return score
+    return new_score
 
-# ================= AUTO-ROLE ON JOIN =================
-@bot.event
-async def on_member_join(member):
-    role = member.guild.get_role(NON_VERIFIED_ROLE_ID)
-    if role:
-        try:
-            await member.add_roles(role)
-        except Exception as e:
-            print(f"Error giving role: {e}")
+# ================= AUTO DM BACKUP =================
+async def dm_leaderboard_backup():
+    user = await bot.fetch_user(OWNER_ID)
+    c.execute("SELECT user_id, score FROM points ORDER BY score DESC")
+    rows = c.fetchall()
 
+    if not rows:
+        msg = "📊 Leaderboard Backup\n\n(No data)"
+    else:
+        msg = "📊 **Leaderboard Backup (Auto)**\n\n"
+        for uid, score in rows:
+            msg += f"{uid} : {score}\n"
 
-# ================= ADMIN POINT COMMANDS =================
+    try:
+        await user.send(msg)
+    except:
+        print("Could not DM leaderboard backup.")
+
+# ================= ADMIN COMMANDS =================
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def givepoints(ctx, member: discord.Member, amount: int):
+    new_score = add_point(member.id, amount)
+    await ctx.send(f"✅ Added `{amount}` points to {member.mention} → Total: `{new_score}`")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def bulkpoints(ctx, amount: int, *members: discord.Member):
+    if not members:
+        return await ctx.send("❌ Mention users to give points.")
+
+    for member in members:
+        add_point(member.id, amount)
+
+    await ctx.send(f"✅ Added `{amount}` points to `{len(members)}` users.")
+
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def clearlb(ctx):
     c.execute("DELETE FROM points")
     conn.commit()
-    await ctx.send("🗑️ **Leaderboard has been cleared!** All points are back to 0.")
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def setpoints(ctx, member: discord.Member, amount: int):
-    c.execute("INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)", (str(member.id), amount))
-    conn.commit()
-    await ctx.send(f"🎯 Set {member.mention}'s points to `{amount}`.")
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def givepoints(ctx, member: discord.Member, amount: int):
-    c.execute("SELECT score FROM points WHERE user_id = ?", (str(member.id),))
-    row = c.fetchone()
-    current = row[0] if row else 0
-    new_total = current + amount
-    c.execute("INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)", (str(member.id), new_total))
-    conn.commit()
-    await ctx.send(f"✅ Added `{amount}` points to {member.mention}. New total: `{new_total}`.")
+    await ctx.send("🗑️ Leaderboard cleared.")
 
 # ================= GAME COMMANDS =================
 @bot.command()
 @has_game_role()
 async def setgamechannel(ctx, channel: discord.TextChannel):
-    c.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("game_channel", str(channel.id)))
+    c.execute(
+        "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
+        ("game_channel", str(channel.id))
+    )
     conn.commit()
-    await ctx.send(f"✅ Game channel set to: {channel.mention}")
+    await ctx.send(f"🎮 Game channel set to {channel.mention}")
 
 @bot.command()
 @has_game_role()
 async def startgame(ctx):
     global game_running, current_answer
-    if game_running: return await ctx.send("⚠️ Game already running.")
+
+    if game_running:
+        return await ctx.send("⚠️ Game already running.")
 
     c.execute("SELECT value FROM config WHERE key = ?", ("game_channel",))
     row = c.fetchone()
-    if not row: return await ctx.send("❌ Use `*setgamechannel` first.")
+    if not row:
+        return await ctx.send("❌ Set a game channel first.")
 
     channel = ctx.guild.get_channel(int(row[0]))
-    game_running = True
     current_answer = random.choice(sentences)
-    await channel.send(f"🎮 **New Game!** Reverse this sentence:\n`{reverse_sentence(current_answer)}`")
+    game_running = True
+
+    await channel.send(
+        f"🎮 **New Game Started!**\n"
+        f"Reverse this sentence:\n`{reverse_sentence(current_answer)}`"
+    )
 
 @bot.command()
 @has_game_role()
 async def stopgame(ctx):
     global game_running, current_answer
-    game_running, current_answer = False, None
+    game_running = False
+    current_answer = None
     await ctx.send("🛑 Game stopped.")
 
+# ================= PUBLIC =================
 @bot.command()
 async def lb(ctx):
     c.execute("SELECT user_id, score FROM points ORDER BY score DESC LIMIT 10")
     rows = c.fetchall()
-    if not rows: return await ctx.send("📭 Empty leaderboard.")
+
+    if not rows:
+        return await ctx.send("📭 Leaderboard is empty.")
+
     msg = "**🏆 TOP 10 LEADERBOARD**\n\n"
-    for i, (u_id, score) in enumerate(rows, 1):
-        msg += f"**{i}.** <@{u_id}> → `{score}`\n"
+    for i, (uid, score) in enumerate(rows, 1):
+        msg += f"**{i}.** <@{uid}> → `{score}`\n"
+
     await ctx.send(msg)
+
 @bot.command()
 async def help(ctx):
-    msg = (
-        "**🤖 BOT COMMAND HELP**\n\n"
-        "**👑 Admin Commands**\n"
-        "`*givepoints @user amount` → Add points to a user\n\n"
-        "**🎮 Game Manager Commands**\n"
-        "`*setgamechannel #channel` → Set game channel\n"
-        "`*startgame` → Start the game\n"
-        "`*stopgame` → Stop the game\n"
-        "`*clearlb` → Clear leaderboard (if added)\n\n"
-        "**👤 Public Commands**\n"
-        "`*lb` → Show leaderboard\n"
+    await ctx.send(
+        "**🤖 NEXUS COMMANDS**\n\n"
+        "**👑 Admin**\n"
+        "`*givepoints @user amount`\n"
+        "`*bulkpoints amount @user @user`\n"
+        "`*clearlb`\n\n"
+        "**🎮 Game Manager**\n"
+        "`*setgamechannel #channel`\n"
+        "`*startgame`\n"
+        "`*stopgame`\n\n"
+        "**👤 Public**\n"
+        "`*lb`\n"
+        "`*help`"
     )
-    await ctx.send(msg)
-
-
 
 # ================= MESSAGE LISTENER =================
 @bot.event
 async def on_message(message):
     global game_running, current_answer
-    if message.author.bot: return
+    if message.author.bot:
+        return
 
     if game_running and current_answer:
         c.execute("SELECT value FROM config WHERE key = ?", ("game_channel",))
         row = c.fetchone()
+
         if row and message.channel.id == int(row[0]):
             norm = lambda t: re.sub(r"[^\w\s]", "", t.lower()).strip()
+
             if norm(message.content) == norm(current_answer):
                 score = add_point(message.author.id)
-                await message.channel.send(f"🎉 {message.author.mention} got it! Total: {score}")
-                game_running, current_answer = False, None
+                await message.channel.send(
+                    f"🎉 {message.author.mention} WON! Total points: `{score}`"
+                )
+
+                game_running = False
+                current_answer = None
+
+                # 🔥 AUTO DM BACKUP
+                await dm_leaderboard_backup()
 
     await bot.process_commands(message)
 
 bot.run(TOKEN)
-
-
-
-
