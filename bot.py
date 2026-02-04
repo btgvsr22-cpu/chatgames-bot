@@ -113,36 +113,6 @@ async def on_member_join(member):
         except Exception as e:
             print(f"Error giving role: {e}")
 
-# ================= VERIFICATION COMMANDS =================
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def setverifychannel(ctx, channel: discord.TextChannel):
-    class VerifyButton(discord.ui.View):
-        def __init__(self):
-            super().__init__(timeout=None)
-
-        @discord.ui.button(label="Verify", style=discord.ButtonStyle.green)
-        async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
-            if any(role.id == VERIFIED_ROLE_ID for role in interaction.user.roles):
-                return await interaction.response.send_message("✅ You are already verified!", ephemeral=True)
-
-            captcha_text = "".join(random.choices(string.ascii_letters + string.digits, k=5))
-            
-            class CaptchaModal(discord.ui.Modal, title="Complete Captcha"):
-                answer = discord.ui.TextInput(label=f"Type: {captcha_text}")
-                async def on_submit(self, itn: discord.Interaction):
-                    if self.answer.value.strip() == captcha_text:
-                        v_role = itn.guild.get_role(VERIFIED_ROLE_ID)
-                        uv_role = itn.guild.get_role(NON_VERIFIED_ROLE_ID)
-                        if v_role: await itn.user.add_roles(v_role)
-                        if uv_role: await itn.user.remove_roles(uv_role)
-                        await itn.response.send_message("✅ Verified!", ephemeral=True)
-                    else:
-                        await itn.response.send_message("❌ Wrong. Click again to retry.", ephemeral=True)
-            await interaction.response.send_modal(CaptchaModal())
-
-    await channel.send("🔒 Click the button below to verify!", view=VerifyButton())
-    await ctx.send(f"✅ Verification setup in {channel.mention}")
 
 # ================= ADMIN POINT COMMANDS =================
 @bot.command()
@@ -214,7 +184,6 @@ async def help(ctx):
     msg = (
         "**🤖 BOT COMMAND HELP**\n\n"
         "**👑 Admin Commands**\n"
-        "`*setverifychannel #channel` → Set verification channel\n"
         "`*givepoints @user amount` → Add points to a user\n\n"
         "**🎮 Game Manager Commands**\n"
         "`*setgamechannel #channel` → Set game channel\n"
@@ -247,6 +216,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 bot.run(TOKEN)
+
 
 
 
