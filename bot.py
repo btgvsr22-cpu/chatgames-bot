@@ -158,6 +158,31 @@ async def lbmclines(ctx):
 
     await ctx.send(embed=embed_msg("🏆 MCLINES Leaderboard", desc))
 
+# ================= ADMIN POINT CONTROL - MCLINES =================
+@bot.command()
+async def givepointsmc(ctx, member: discord.Member, amount: int):
+    if not ctx.author.guild_permissions.administrator:
+        return await ctx.send(embed=embed_msg("❌ No Permission", "Admin only command.", discord.Color.red()))
+
+    score = add_point(member.id, amount)
+    await ctx.send(embed=embed_msg("✅ Points Added (MCLINES)", f"{member.mention} now has `{score}` points."))
+
+
+@bot.command()
+async def bulkpointsmc(ctx, amount: int, *members: discord.Member):
+    if not ctx.author.guild_permissions.administrator:
+        return await ctx.send(embed=embed_msg("❌ No Permission", "Admin only command.", discord.Color.red()))
+
+    if not members:
+        return await ctx.send(embed=embed_msg("⚠️ Error", "Mention at least one user.", discord.Color.red()))
+
+    desc = ""
+    for member in members:
+        score = add_point(member.id, amount)
+        desc += f"{member.mention} → `{score}` points\n"
+
+    await ctx.send(embed=embed_msg("✅ Bulk Points Added (MCLINES)", desc))
+
 # ================= GTN =================
 @bot.command()
 @has_game_role()
@@ -209,12 +234,38 @@ async def lbgtn(ctx):
 
     await ctx.send(embed=embed_msg("🏆 GTN Leaderboard", desc))
 
+# ================= ADMIN POINT CONTROL - GTN =================
+@bot.command()
+async def givepointsgtn(ctx, member: discord.Member, amount: int):
+    if not ctx.author.guild_permissions.administrator:
+        return await ctx.send(embed=embed_msg("❌ No Permission", "Admin only command.", discord.Color.red()))
+
+    score = add_gtn_point(member.id, amount)
+    await ctx.send(embed=embed_msg("✅ Points Added (GTN)", f"{member.mention} now has `{score}` points."))
+
+
+@bot.command()
+async def bulkpointsgtn(ctx, amount: int, *members: discord.Member):
+    if not ctx.author.guild_permissions.administrator:
+        return await ctx.send(embed=embed_msg("❌ No Permission", "Admin only command.", discord.Color.red()))
+
+    if not members:
+        return await ctx.send(embed=embed_msg("⚠️ Error", "Mention at least one user.", discord.Color.red()))
+
+    desc = ""
+    for member in members:
+        score = add_gtn_point(member.id, amount)
+        desc += f"{member.mention} → `{score}` points\n"
+
+    await ctx.send(embed=embed_msg("✅ Bulk Points Added (GTN)", desc))
+
 # ================= HELP COMMAND =================
 @bot.command()
 async def help(ctx):
 
     embed = discord.Embed(title="🎮 NEXUS Game System", color=discord.Color.gold())
 
+    # Admin Section
     if ctx.author.guild_permissions.administrator:
         embed.add_field(
             name="👑 Admin Access Only",
@@ -222,6 +273,18 @@ async def help(ctx):
             inline=False
         )
 
+        embed.add_field(
+            name="⚙️ Admin Point Commands",
+            value="""
+`*givepointsmc @user amount`
+`*bulkpointsmc amount @user1 @user2`
+`*givepointsgtn @user amount`
+`*bulkpointsgtn amount @user1 @user2`
+""",
+            inline=False
+        )
+
+    # Game Manager Section
     if any(role.id == GAME_MANAGER_ROLE_ID for role in ctx.author.roles):
         embed.add_field(
             name="🎮 Game Manager Commands",
@@ -238,18 +301,8 @@ async def help(ctx):
             inline=False
         )
 
-    embed.add_field(
-        name="🌍 Public Commands",
-        value="""
-`*lbmclines`
-`*lbgtn`
-`*help`
-""",
-        inline=False
-    )
+    # Publ
 
-    embed.set_footer(text="NEXUS Premium Game System ✨")
-    await ctx.send(embed=embed)
 
 # ================= MESSAGE LISTENER =================
 @bot.event
@@ -298,3 +351,4 @@ async def on_message(message):
     await bot.process_commands(message)
 
 bot.run(TOKEN)
+
