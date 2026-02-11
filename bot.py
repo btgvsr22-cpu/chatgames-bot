@@ -47,6 +47,43 @@ sentences = [
     "After falling into a ravine I escaped using water and blocks",
     "The redstone machine stopped working and flooded my underground base",
     "I traveled very far just to find a jungle biome",
+    "While building a bridge in the nether I almost fell into lava",
+    "The stronghold was hidden so deep that it took hours to find",
+    "I tried speedrunning but a creeper ended the run instantly",
+    "During the raid multiple evokers spawned and caused confusion",
+    "I lost my enchanted armor while fighting wither skeletons",
+    "The ocean monument felt dangerous with guardians attacking constantly",
+    "I built a farm but forgot to light it properly",
+    "After curing villagers I finally unlocked good trades",
+    "The end city loot was worth the risky elytra flight",
+    "I entered a cave thinking it was safe but mobs kept spawning",
+    "While exploring the nether fortress I got surrounded by blazes",
+    "I survived my hardcore world for weeks before one mistake",
+    "The piston door broke during a redstone test",
+    "I tried escaping lava by placing blocks quickly",
+    "The village bell rang loudly as the raid started",
+    "I spent hours organizing chests and still felt lost",
+    "Mining ancient debris took patience and careful planning",
+    "I lost my elytra durability mid flight and panicked",
+    "The beacon effects made mining much faster",
+    "I built a secret underground base with long tunnels",
+    "The night felt endless as phantoms kept attacking",
+    "I trapped a villager to get mending books",
+    "The nether highway saved time but felt unsafe",
+    "I explored a deep dark biome and felt nervous",
+    "The warden sounds echoed through the cave",
+    "I fought the wither and damaged half my base",
+    "The redstone clock failed and broke the system",
+    "I fought the dragon without enough preparation",
+    "The mineshaft was full of webs and spiders",
+    "I built a castle but never finished decorating it",
+    "I survived a fall by placing water quickly",
+    "The bastion loot was guarded by piglin brutes",
+    "I underestimated the raid difficulty and struggled",
+    "I spent days farming netherite upgrades",
+    "Flying with elytra felt risky but exciting",
+    "The villagers panicked as zombies attacked",
+    "I explored a snowy biome for resources",
     "I finally beat the game after many tries"
 ]
 
@@ -301,7 +338,19 @@ async def help(ctx):
             inline=False
         )
 
-    # Publ
+    # Public Section
+    embed.add_field(
+        name="🌍 Public Commands",
+        value="""
+`*lbmclines`
+`*lbgtn`
+`*help`
+""",
+        inline=False
+    )
+
+    embed.set_footer(text="NEXUS Premium Game System ✨")
+    await ctx.send(embed=embed)
 
 
 # ================= MESSAGE LISTENER =================
@@ -351,4 +400,5 @@ async def on_message(message):
     await bot.process_commands(message)
 
 bot.run(TOKEN)
+
 
