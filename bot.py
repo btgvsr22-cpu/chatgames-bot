@@ -47,49 +47,15 @@ sentences = [
     "After falling into a ravine I escaped using water and blocks",
     "The redstone machine stopped working and flooded my underground base",
     "I traveled very far just to find a jungle biome",
-    "While building a bridge in the nether I almost fell into lava",
-    "The stronghold was hidden so deep that it took hours to find",
-    "I tried speedrunning but a creeper ended the run instantly",
-    "During the raid multiple evokers spawned and caused confusion",
-    "I lost my enchanted armor while fighting wither skeletons",
-    "The ocean monument felt dangerous with guardians attacking constantly",
-    "I built a farm but forgot to light it properly",
-    "After curing villagers I finally unlocked good trades",
-    "The end city loot was worth the risky elytra flight",
-    "I entered a cave thinking it was safe but mobs kept spawning",
-    "While exploring the nether fortress I got surrounded by blazes",
-    "I survived my hardcore world for weeks before one mistake",
-    "The piston door broke during a redstone test",
-    "I tried escaping lava by placing blocks quickly",
-    "The village bell rang loudly as the raid started",
-    "I spent hours organizing chests and still felt lost",
-    "Mining ancient debris took patience and careful planning",
-    "I lost my elytra durability mid flight and panicked",
-    "The beacon effects made mining much faster",
-    "I built a secret underground base with long tunnels",
-    "The night felt endless as phantoms kept attacking",
-    "I trapped a villager to get mending books",
-    "The nether highway saved time but felt unsafe",
-    "I explored a deep dark biome and felt nervous",
-    "The warden sounds echoed through the cave",
-    "I fought the wither and damaged half my base",
-    "The redstone clock failed and broke the system",
-    "I fought the dragon without enough preparation",
-    "The mineshaft was full of webs and spiders",
-    "I built a castle but never finished decorating it",
-    "I survived a fall by placing water quickly",
-    "The bastion loot was guarded by piglin brutes",
-    "I underestimated the raid difficulty and struggled",
-    "I spent days farming netherite upgrades",
-    "Flying with elytra felt risky but exciting",
-    "The villagers panicked as zombies attacked",
-    "I explored a snowy biome for resources",
     "I finally beat the game after many tries"
 ]
 
 # ================= HELPERS =================
 def reverse_sentence(sentence):
     return sentence[::-1]
+
+def embed_msg(title, description, color=discord.Color.gold()):
+    return discord.Embed(title=title, description=description, color=color)
 
 def has_game_role():
     async def predicate(ctx):
@@ -124,14 +90,14 @@ def add_gtn_point(user_id, amount=1):
 # ================= 5 MINUTE HINT LOOP =================
 @tasks.loop(minutes=5)
 async def gtn_hint_loop():
-    global gtn_running, gtn_number, gtn_channel_id, gtn_low, gtn_high
-
     if gtn_running and gtn_channel_id:
         channel = bot.get_channel(gtn_channel_id)
         if channel:
-            await channel.send(
-                f"⏳ 5 MIN HINT!\nThe number is between `{gtn_low}` and `{gtn_high}`"
+            embed = embed_msg(
+                "⏳ 5 Minute Hint",
+                f"The number is between **{gtn_low}** and **{gtn_high}**"
             )
+            await channel.send(embed=embed)
 
 @bot.event
 async def on_ready():
@@ -144,22 +110,25 @@ async def on_ready():
 async def setmclines(ctx, channel: discord.TextChannel):
     c.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("game_channel", str(channel.id)))
     conn.commit()
-    await ctx.send(f"🎮 MCLINES channel set to {channel.mention}")
+    await ctx.send(embed=embed_msg("🎮 MCLINES Channel Set", f"{channel.mention}"))
 
 @bot.command()
 @has_game_role()
 async def startmcline(ctx):
     global game_running, current_answer
     if game_running:
-        return await ctx.send("⚠️ Game already running.")
+        return await ctx.send(embed=embed_msg("⚠️ Already Running", "MCLINES is already active.", discord.Color.red()))
+
     c.execute("SELECT value FROM config WHERE key = ?", ("game_channel",))
     row = c.fetchone()
     if not row:
-        return await ctx.send("❌ Set a MCLINES channel first.")
+        return await ctx.send(embed=embed_msg("❌ Error", "Set a MCLINES channel first.", discord.Color.red()))
+
     channel = ctx.guild.get_channel(int(row[0]))
     current_answer = random.choice(sentences)
     game_running = True
-    await channel.send(f"🎮 Reverse this:\n`{reverse_sentence(current_answer)}`")
+
+    await channel.send(embed=embed_msg("🎮 Reverse This", f"`{reverse_sentence(current_answer)}`"))
 
 @bot.command()
 @has_game_role()
@@ -167,25 +136,27 @@ async def stopmcline(ctx):
     global game_running, current_answer
     game_running = False
     current_answer = None
-    await ctx.send("🛑 MCLINES stopped.")
+    await ctx.send(embed=embed_msg("🛑 Stopped", "MCLINES stopped.", discord.Color.red()))
 
 @bot.command()
 @has_game_role()
 async def clearlbmclines(ctx):
     c.execute("DELETE FROM points")
     conn.commit()
-    await ctx.send("🗑️ MCLINES leaderboard cleared.")
+    await ctx.send(embed=embed_msg("🗑️ Cleared", "MCLINES leaderboard cleared."))
 
 @bot.command()
 async def lbmclines(ctx):
     c.execute("SELECT user_id, score FROM points ORDER BY score DESC LIMIT 10")
     rows = c.fetchall()
     if not rows:
-        return await ctx.send("📭 Leaderboard empty.")
-    msg = "**🏆 MCLINES LEADERBOARD**\n\n"
+        return await ctx.send(embed=embed_msg("📭 Empty", "Leaderboard is empty."))
+
+    desc = ""
     for i, (uid, score) in enumerate(rows, 1):
-        msg += f"{i}. <@{uid}> → `{score}`\n"
-    await ctx.send(msg)
+        desc += f"**{i}.** <@{uid}> → `{score}`\n"
+
+    await ctx.send(embed=embed_msg("🏆 MCLINES Leaderboard", desc))
 
 # ================= GTN =================
 @bot.command()
@@ -193,20 +164,22 @@ async def lbmclines(ctx):
 async def setgtn(ctx, channel: discord.TextChannel):
     global gtn_channel_id
     gtn_channel_id = channel.id
-    await ctx.send(f"🎯 GTN channel set to {channel.mention}")
+    await ctx.send(embed=embed_msg("🎯 GTN Channel Set", f"{channel.mention}"))
 
 @bot.command()
 @has_game_role()
 async def srtgtn(ctx):
     global gtn_running, gtn_number, gtn_low, gtn_high
     if not gtn_channel_id:
-        return await ctx.send("❌ Set GTN channel first.")
+        return await ctx.send(embed=embed_msg("❌ Error", "Set GTN channel first.", discord.Color.red()))
+
     gtn_running = True
     gtn_number = random.randint(0, 9999)
     gtn_low = 0
     gtn_high = 9999
+
     channel = ctx.guild.get_channel(gtn_channel_id)
-    await channel.send("🎯 Guess The Number started! (0-9999)")
+    await channel.send(embed=embed_msg("🎯 Guess The Number", "Game started! Range: 0 - 9999"))
 
 @bot.command()
 @has_game_role()
@@ -214,25 +187,69 @@ async def stopgtn(ctx):
     global gtn_running, gtn_number
     gtn_running = False
     gtn_number = None
-    await ctx.send("🛑 GTN stopped.")
+    await ctx.send(embed=embed_msg("🛑 Stopped", "GTN stopped.", discord.Color.red()))
 
 @bot.command()
 @has_game_role()
 async def clearlbgtn(ctx):
     c.execute("DELETE FROM gtn_points")
     conn.commit()
-    await ctx.send("🗑️ GTN leaderboard cleared.")
+    await ctx.send(embed=embed_msg("🗑️ Cleared", "GTN leaderboard cleared."))
 
 @bot.command()
 async def lbgtn(ctx):
     c.execute("SELECT user_id, score FROM gtn_points ORDER BY score DESC LIMIT 10")
     rows = c.fetchall()
     if not rows:
-        return await ctx.send("📭 GTN leaderboard empty.")
-    msg = "**🏆 GTN LEADERBOARD**\n\n"
+        return await ctx.send(embed=embed_msg("📭 Empty", "GTN leaderboard is empty."))
+
+    desc = ""
     for i, (uid, score) in enumerate(rows, 1):
-        msg += f"{i}. <@{uid}> → `{score}`\n"
-    await ctx.send(msg)
+        desc += f"**{i}.** <@{uid}> → `{score}`\n"
+
+    await ctx.send(embed=embed_msg("🏆 GTN Leaderboard", desc))
+
+# ================= HELP COMMAND =================
+@bot.command()
+async def help(ctx):
+
+    embed = discord.Embed(title="🎮 NEXUS Game System", color=discord.Color.gold())
+
+    if ctx.author.guild_permissions.administrator:
+        embed.add_field(
+            name="👑 Admin Access Only",
+            value="Full administrative permissions.",
+            inline=False
+        )
+
+    if any(role.id == GAME_MANAGER_ROLE_ID for role in ctx.author.roles):
+        embed.add_field(
+            name="🎮 Game Manager Commands",
+            value="""
+`*setmclines`
+`*startmcline`
+`*stopmcline`
+`*clearlbmclines`
+`*setgtn`
+`*srtgtn`
+`*stopgtn`
+`*clearlbgtn`
+""",
+            inline=False
+        )
+
+    embed.add_field(
+        name="🌍 Public Commands",
+        value="""
+`*lbmclines`
+`*lbgtn`
+`*help`
+""",
+        inline=False
+    )
+
+    embed.set_footer(text="NEXUS Premium Game System ✨")
+    await ctx.send(embed=embed)
 
 # ================= MESSAGE LISTENER =================
 @bot.event
@@ -251,7 +268,9 @@ async def on_message(message):
             norm = lambda t: re.sub(r"[^\w\s]", "", t.lower()).strip()
             if norm(message.content) == norm(current_answer):
                 score = add_point(message.author.id)
-                await message.channel.send(f"🎉 {message.author.mention} WON! `{score}` points")
+                await message.channel.send(
+                    embed=embed_msg("🎉 Winner!", f"{message.author.mention} earned `{score}` points!")
+                )
                 game_running = False
                 current_answer = None
 
@@ -263,18 +282,18 @@ async def on_message(message):
             if guess == gtn_number:
                 score = add_gtn_point(message.author.id)
                 await message.channel.send(
-                    f"🎉 {message.author.mention} guessed correctly! `{score}` wins"
+                    embed=embed_msg("🎉 Correct Guess!", f"{message.author.mention} now has `{score}` wins!")
                 )
                 gtn_running = False
                 gtn_number = None
 
             elif guess < gtn_number:
                 gtn_low = max(gtn_low, guess)
-                await message.channel.send("🔼 Higher!")
+                await message.channel.send(embed=embed_msg("🔼 Higher!", "Try a bigger number."))
 
             else:
                 gtn_high = min(gtn_high, guess)
-                await message.channel.send("🔽 Lower!")
+                await message.channel.send(embed=embed_msg("🔽 Lower!", "Try a smaller number."))
 
     await bot.process_commands(message)
 
