@@ -254,12 +254,23 @@ async def srtgtn(ctx):
         return await ctx.send(embed=embed_msg("❌ Error", "Set GTN channel first.", discord.Color.red()))
 
     gtn_running = True
-    gtn_number = random.randint(0, 9999)
-    gtn_low = 0
-    gtn_high = 9999
+
+    # RANDOM RANGE LOGIC (3 digit or 4 digit tight ranges)
+    digits = random.choice([3, 4])
+
+    if digits == 3:
+        start = random.randint(100, 800)
+        end = start + random.randint(200, 400)
+    else:
+        start = random.randint(1000, 9000)
+        end = start + random.randint(200, 500)
+
+    gtn_low = start
+    gtn_high = end
+    gtn_number = random.randint(gtn_low, gtn_high)
 
     channel = ctx.guild.get_channel(gtn_channel_id)
-    await channel.send(embed=embed_msg("🎯 Guess The Number", "Game started! Range: 0 - 9999"))
+    await channel.send(embed=embed_msg("🎯 Guess The Number", f"Game started! Range: {gtn_low} - {gtn_high}"))
 
 @bot.command()
 @has_game_role()
@@ -288,6 +299,49 @@ async def lbgtn(ctx):
         desc += f"**{i}.** <@{uid}> → `{score}`\n"
 
     await ctx.send(embed=embed_msg("🏆 GTN Leaderboard", desc))
+
+# ================= ADMIN POINT CONTROL - GTN =================
+@bot.command()
+async def givepointsgtn(ctx, member: discord.Member, amount: int):
+    if not ctx.author.guild_permissions.administrator:
+        return await ctx.send(embed=embed_msg("❌ No Permission", "Admin only command.", discord.Color.red()))
+
+    score = add_gtn_point(member.id, amount)
+    await ctx.send(embed=embed_msg("✅ Points Added (GTN)", f"{member.mention} now has `{score}` points."))
+
+
+@bot.command()
+async def bulkpointsgtn(ctx, amount: int, *members: discord.Member):
+    if not ctx.author.guild_permissions.administrator:
+        return await ctx.send(embed=embed_msg("❌ No Permission", "Admin only command.", discord.Color.red()))
+
+    if not members:
+        return await ctx.send(embed=embed_msg("⚠️ Error", "Mention at least one user.", discord.Color.red()))
+
+    desc = ""
+    for member in members:
+        score = add_gtn_point(member.id, amount)
+        desc += f"{member.mention} → `{score}` points\n"
+
+    await ctx.send(embed=embed_msg("✅ Bulk Points Added (GTN)", desc))
+
+@bot.command()
+async def removepointsgtn(ctx, member: discord.Member, amount: int):
+    if not ctx.author.guild_permissions.administrator:
+        return await ctx.send(embed=embed_msg("❌ No Permission", "Admin only command.", discord.Color.red()))
+
+    c.execute("SELECT score FROM gtn_points WHERE user_id = ?", (str(member.id),))
+    row = c.fetchone()
+    current = row[0] if row else 0
+    new_score = max(0, current - amount)
+
+    c.execute("INSERT OR REPLACE INTO gtn_points (user_id, score) VALUES (?, ?)", (str(member.id), new_score))
+    conn.commit()
+
+    await ctx.send(embed=embed_msg(
+        "➖ Points Removed (GTN)",
+        f"{member.mention} now has `{new_score}` points."
+    ))
 
 # ================= ADMIN POINT CONTROL - GTN =================
 @bot.command()
@@ -440,6 +494,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 bot.run(TOKEN)
+
 
 
 
