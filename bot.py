@@ -220,6 +220,24 @@ async def bulkpointsmc(ctx, amount: int, *members: discord.Member):
 
     await ctx.send(embed=embed_msg("✅ Bulk Points Added (MCLINES)", desc))
 
+@bot.command()
+async def removepointsmc(ctx, member: discord.Member, amount: int):
+    if not ctx.author.guild_permissions.administrator:
+        return await ctx.send(embed=embed_msg("❌ No Permission", "Admin only command.", discord.Color.red()))
+
+    c.execute("SELECT score FROM points WHERE user_id = ?", (str(member.id),))
+    row = c.fetchone()
+    current = row[0] if row else 0
+    new_score = max(0, current - amount)
+
+    c.execute("INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)", (str(member.id), new_score))
+    conn.commit()
+
+    await ctx.send(embed=embed_msg(
+        "➖ Points Removed (MCLINES)",
+        f"{member.mention} now has `{new_score}` points."
+    ))
+
 # ================= GTN =================
 @bot.command()
 @has_game_role()
@@ -296,6 +314,24 @@ async def bulkpointsgtn(ctx, amount: int, *members: discord.Member):
 
     await ctx.send(embed=embed_msg("✅ Bulk Points Added (GTN)", desc))
 
+@bot.command()
+async def removepointsgtn(ctx, member: discord.Member, amount: int):
+    if not ctx.author.guild_permissions.administrator:
+        return await ctx.send(embed=embed_msg("❌ No Permission", "Admin only command.", discord.Color.red()))
+
+    c.execute("SELECT score FROM gtn_points WHERE user_id = ?", (str(member.id),))
+    row = c.fetchone()
+    current = row[0] if row else 0
+    new_score = max(0, current - amount)
+
+    c.execute("INSERT OR REPLACE INTO gtn_points (user_id, score) VALUES (?, ?)", (str(member.id), new_score))
+    conn.commit()
+
+    await ctx.send(embed=embed_msg(
+        "➖ Points Removed (GTN)",
+        f"{member.mention} now has `{new_score}` points."
+    ))
+
 # ================= HELP COMMAND =================
 @bot.command()
 async def help(ctx):
@@ -315,8 +351,11 @@ async def help(ctx):
             value="""
 `*givepointsmc @user amount`
 `*bulkpointsmc amount @user1 @user2`
+`*removepointsmc @user amount`
+
 `*givepointsgtn @user amount`
 `*bulkpointsgtn amount @user1 @user2`
+`*removepointsgtn @user amount`
 """,
             inline=False
         )
@@ -349,8 +388,9 @@ async def help(ctx):
         inline=False
     )
 
-    embed.set_footer(text="NEXUS Premium Game System ✨")
+    embed.set_footer(text="NEXUS Game Command System ✨")
     await ctx.send(embed=embed)
+
 
 
 # ================= MESSAGE LISTENER =================
@@ -400,5 +440,6 @@ async def on_message(message):
     await bot.process_commands(message)
 
 bot.run(TOKEN)
+
 
 
