@@ -11,7 +11,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 GAME_MANAGER_ROLE_ID = 1468173295760314473
 OWNER_ID = 1448709644091527363
 
-DB_FILE = "bot_data.db"
+DB_FILE = "/data/bot_data.db"
 # =========================================
 
 intents = discord.Intents.default()
@@ -440,6 +440,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 bot.run(TOKEN)
+
 
 
 
