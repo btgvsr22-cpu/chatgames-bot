@@ -343,68 +343,6 @@ async def on_message(message):
         await message.channel.send(embed=embed_msg("🎯 Hint", msg))
 
 
-# -------- LISTENER --------
-@bot.event
-async def on_message(message):
-    global gtn_running, gtn_number
-
-    if message.author.bot:
-        return
-
-# -------- GTN LISTENER --------
-gtn_last_guess_time = {}
-SPAM_COOLDOWN = 2
-
-@bot.event
-async def on_message(message):
-
-    if message.author.bot:
-        return
-
-    global gtn_running, gtn_number
-
-    if gtn_running and message.channel.id == gtn_channel_id:
-
-        if message.content.isdigit():
-
-            now = time.time()
-            last = gtn_last_guess_time.get(message.author.id, 0)
-
-            if now - last < SPAM_COOLDOWN:
-                return
-
-            gtn_last_guess_time[message.author.id] = now
-
-            guess = int(message.content)
-
-            if guess == gtn_number:
-                score = add_gtn_point(message.author.id)
-
-                await message.channel.send(embed=embed_msg(
-                    "🎉 Correct Guess!",
-                    f"{message.author.mention} guessed **{gtn_number}** and now has `{score}` wins!"
-                ))
-
-                gtn_running = False
-                gtn_number = None
-                return
-
-            diff = abs(guess - gtn_number)
-
-            if diff > 100:
-                text = "❄️ Too far!"
-            elif diff > 70:
-                text = "🌥️ Far!"
-            elif diff > 50:
-                text = "🌤️ Close!"
-            else:
-                text = "🔥 Very Close!"
-
-            hint = "Try higher." if guess < gtn_number else "Try lower."
-
-            await message.channel.send(embed=embed_msg(text, hint))
-
-    await bot.process_commands(message)
 
 
 
@@ -544,6 +482,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 bot.run(TOKEN)
+
 
 
 
