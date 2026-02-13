@@ -222,6 +222,12 @@ async def removepointsmc(ctx, member: discord.Member, amount: int):
     ))
 
 # ================= GTN =================
+gtn_running = False
+gtn_number = None
+gtn_channel_id = None
+gtn_low = 0
+gtn_high = 0
+
 import time
 
 gtn_cooldowns = {}
@@ -496,6 +502,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 bot.run(TOKEN)
+
 
 
 
