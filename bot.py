@@ -246,6 +246,7 @@ async def setgtn(ctx, channel: discord.TextChannel):
     gtn_channel_id = channel.id
     await ctx.send(embed=embed_msg("🎯 GTN Channel Set", f"{channel.mention}"))
 
+
 @bot.command()
 @has_game_role()
 async def srtgtn(ctx):
@@ -272,6 +273,7 @@ async def srtgtn(ctx):
     channel = ctx.guild.get_channel(gtn_channel_id)
     await channel.send(embed=embed_msg("🎯 Guess The Number", f"Game started! Range: {gtn_low} - {gtn_high}"))
 
+
 @bot.command()
 @has_game_role()
 async def stopgtn(ctx):
@@ -280,12 +282,14 @@ async def stopgtn(ctx):
     gtn_number = None
     await ctx.send(embed=embed_msg("🛑 Stopped", "GTN stopped.", discord.Color.red()))
 
+
 @bot.command()
 @has_game_role()
 async def clearlbgtn(ctx):
     c.execute("DELETE FROM gtn_points")
     conn.commit()
     await ctx.send(embed=embed_msg("🗑️ Cleared", "GTN leaderboard cleared."))
+
 
 @bot.command()
 async def lbgtn(ctx):
@@ -299,6 +303,7 @@ async def lbgtn(ctx):
         desc += f"**{i}.** <@{uid}> → `{score}`\n"
 
     await ctx.send(embed=embed_msg("🏆 GTN Leaderboard", desc))
+
 
 # ================= ADMIN POINT CONTROL - GTN =================
 @bot.command()
@@ -429,31 +434,13 @@ async def on_message(message):
                 game_running = False
                 current_answer = None
 
-    # GTN
-    if gtn_running and message.channel.id == gtn_channel_id:
-        if message.content.isdigit():
-            guess = int(message.content)
 
-            if guess == gtn_number:
-                score = add_gtn_point(message.author.id)
-                await message.channel.send(
-                    embed=embed_msg("🎉 Correct Guess!", f"{message.author.mention} now has `{score}` wins!")
-                )
-                gtn_running = False
-                gtn_number = None
-
-            elif guess < gtn_number:
-    gtn_low = max(gtn_low, guess)
-    await message.channel.send(embed=embed_msg("🔼 Higher!", "Try a bigger number."))
-
-else:
-    gtn_high = min(gtn_high, guess)
-    await message.channel.send(embed=embed_msg("🔽 Lower!", "Try a smaller number."))
 
 
     await bot.process_commands(message)
 
 bot.run(TOKEN)
+
 
 
 
