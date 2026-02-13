@@ -124,23 +124,6 @@ def add_gtn_point(user_id, amount=1):
     conn.commit()
     return new_score
 
-# ================= 5 MINUTE HINT LOOP =================
-@tasks.loop(minutes=5)
-async def gtn_hint_loop():
-    if gtn_running and gtn_channel_id:
-        channel = bot.get_channel(gtn_channel_id)
-        if channel:
-            embed = embed_msg(
-                "⏳ 5 Minute Hint",
-                f"The number is between **{gtn_low}** and **{gtn_high}**"
-            )
-            await channel.send(embed=embed)
-
-@bot.event
-async def on_ready():
-    if not gtn_hint_loop.is_running():
-        gtn_hint_loop.start()
-
 # ================= MCLINES =================
 @bot.command()
 @has_game_role()
@@ -239,6 +222,17 @@ async def removepointsmc(ctx, member: discord.Member, amount: int):
     ))
 
 # ================= GTN =================
+
+gtn_channel_id = None
+gtn_running = False
+gtn_number = None
+gtn_low = None
+gtn_high = None
+gtn_last_guess_time = {}
+
+SPAM_COOLDOWN = 2  # seconds
+
+
 @bot.command()
 @has_game_role()
 async def setgtn(ctx, channel: discord.TextChannel):
@@ -251,12 +245,12 @@ async def setgtn(ctx, channel: discord.TextChannel):
 @has_game_role()
 async def srtgtn(ctx):
     global gtn_running, gtn_number, gtn_low, gtn_high
+
     if not gtn_channel_id:
         return await ctx.send(embed=embed_msg("❌ Error", "Set GTN channel first.", discord.Color.red()))
 
     gtn_running = True
 
-    # RANDOM RANGE LOGIC (3 digit or 4 digit tight ranges)
     digits = random.choice([3, 4])
 
     if digits == 3:
@@ -271,7 +265,10 @@ async def srtgtn(ctx):
     gtn_number = random.randint(gtn_low, gtn_high)
 
     channel = ctx.guild.get_channel(gtn_channel_id)
-    await channel.send(embed=embed_msg("🎯 Guess The Number", f"Game started! Range: {gtn_low} - {gtn_high}"))
+    await channel.send(embed=embed_msg(
+        "🎯 Guess The Number",
+        f"Game started!\nRange: **{gtn_low} - {gtn_high}**"
+    ))
 
 
 @bot.command()
@@ -303,6 +300,59 @@ async def lbgtn(ctx):
         desc += f"**{i}.** <@{uid}> → `{score}`\n"
 
     await ctx.send(embed=embed_msg("🏆 GTN Leaderboard", desc))
+
+
+# -------- LISTENER --------
+@bot.event
+async def on_message(message):
+    global gtn_running, gtn_number
+
+    if message.author.bot:
+        return
+
+    if gtn_running and message.channel.id == gtn_channel_id:
+
+        if message.content.isdigit():
+
+            now = time.time()
+            last = gtn_last_guess_time.get(message.author.id, 0)
+
+            if now - last < SPAM_COOLDOWN:
+                return
+
+            gtn_last_guess_time[message.author.id] = now
+
+            guess = int(message.content)
+
+            if guess == gtn_number:
+                score = add_gtn_point(message.author.id)
+
+                await message.channel.send(embed=embed_msg(
+                    "🎉 Correct Guess!",
+                    f"{message.author.mention} guessed **{gtn_number}** and now has `{score}` wins!"
+                ))
+
+                gtn_running = False
+                gtn_number = None
+                return
+
+            diff = abs(guess - gtn_number)
+
+            if diff > 100:
+                text = "❄️ Too far!"
+            elif diff > 70:
+                text = "🌥️ Far!"
+            elif diff > 50:
+                text = "🌤️ Close!"
+            else:
+                text = "🔥 Very Close!"
+
+            hint = "Try higher." if guess < gtn_number else "Try lower."
+
+            await message.channel.send(embed=embed_msg(text, hint))
+
+    await bot.process_commands(message)
+
 
 
 # ================= ADMIN POINT CONTROL - GTN =================
@@ -440,6 +490,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 bot.run(TOKEN)
+
 
 
 
