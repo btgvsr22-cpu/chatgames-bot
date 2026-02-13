@@ -223,7 +223,14 @@ async def removepointsmc(ctx, member: discord.Member, amount: int):
 
 # ================= GTN =================
 import time
+
 gtn_cooldowns = {}
+gtn_running = False
+gtn_number = None
+gtn_channel_id = None
+gtn_low = 0
+gtn_high = 0
+
 
 @bot.command()
 @has_game_role()
@@ -237,12 +244,12 @@ async def setgtn(ctx, channel: discord.TextChannel):
 @has_game_role()
 async def srtgtn(ctx):
     global gtn_running, gtn_number, gtn_low, gtn_high
+
     if not gtn_channel_id:
         return await ctx.send(embed=embed_msg("❌ Error", "Set GTN channel first.", discord.Color.red()))
 
     gtn_running = True
 
-    # RANDOM RANGE LOGIC (3 digit or 4 digit tight ranges)
     digits = random.choice([3, 4])
 
     if digits == 3:
@@ -257,7 +264,10 @@ async def srtgtn(ctx):
     gtn_number = random.randint(gtn_low, gtn_high)
 
     channel = ctx.guild.get_channel(gtn_channel_id)
-    await channel.send(embed=embed_msg("🎯 Guess The Number", f"Game started! Range: {gtn_low} - {gtn_high}"))
+    await channel.send(embed=embed_msg(
+        "🎯 Guess The Number",
+        f"Game started!\nRange: **{gtn_low} — {gtn_high}**"
+    ))
 
 
 @bot.command()
@@ -281,6 +291,7 @@ async def clearlbgtn(ctx):
 async def lbgtn(ctx):
     c.execute("SELECT user_id, score FROM gtn_points ORDER BY score DESC LIMIT 10")
     rows = c.fetchall()
+
     if not rows:
         return await ctx.send(embed=embed_msg("📭 Empty", "GTN leaderboard is empty."))
 
@@ -289,6 +300,8 @@ async def lbgtn(ctx):
         desc += f"**{i}.** <@{uid}> → `{score}`\n"
 
     await ctx.send(embed=embed_msg("🏆 GTN Leaderboard", desc))
+
+
 @bot.command()
 @has_game_role()
 async def gtnanswer(ctx):
@@ -298,55 +311,56 @@ async def gtnanswer(ctx):
     await ctx.send(embed=embed_msg("🎯 Current Answer", f"The number is **{gtn_number}**"))
 
 
-# ================= GTN GUESS LISTENER =================
+# ================= GTN LISTENER =================
 @bot.event
 async def on_message(message):
-    await bot.process_commands(message)
-
-    global gtn_running, gtn_number
 
     if message.author.bot:
         return
 
-    if gtn_running and message.channel.id == gtn_channel_id and message.content.isdigit():
+    global gtn_running, gtn_number
 
-        # anti spam protection (2 sec)
+    if gtn_running and message.channel.id == gtn_channel_id and message.content.strip().isdigit():
+
         now = time.time()
-        if message.author.id in gtn_cooldowns and now - gtn_cooldowns[message.author.id] < 2:
-            return
-        gtn_cooldowns[message.author.id] = now
+        last = gtn_cooldowns.get(message.author.id, 0)
 
-        guess = int(message.content)
+        if now - last < 2:
+            return
+
+        gtn_cooldowns[message.author.id] = now
+        guess = int(message.content.strip())
 
         # correct guess
         if guess == gtn_number:
             score = add_gtn_point(message.author.id)
-            await message.channel.send(
-                embed=embed_msg("🎉 Correct Guess!", f"{message.author.mention} now has `{score}` wins!")
-            )
+
+            await message.channel.send(embed=embed_msg(
+                "🎉 Correct Guess!",
+                f"{message.author.mention} guessed **{gtn_number}** and now has `{score}` wins!"
+            ))
+
             gtn_running = False
             gtn_number = None
             return
 
-        # distance hint system
-        distance = abs(guess - gtn_number)
+        # hint system
+        diff = abs(guess - gtn_number)
 
-        if distance > 100:
-            msg = "📉 Too Far!"
-        elif distance > 70:
-            msg = "📊 Far!"
-        elif distance > 50:
-            msg = "📈 Close!"
+        if diff > 100:
+            text = "📉 Too Far!"
+        elif diff > 70:
+            text = "📊 Far!"
+        elif diff > 50:
+            text = "📈 Close!"
         else:
-            msg = "🔥 Very Close!"
+            text = "🔥 Very Close!"
 
-        await message.channel.send(embed=embed_msg("🎯 Hint", msg))
+        hint = "Try higher." if guess < gtn_number else "Try lower."
 
+        await message.channel.send(embed=embed_msg(text, hint))
 
-
-
-
-# ================= ADMIN POINT CONTROL - GTN =================
+    await bot.process_commands(message)# ================= ADMIN POINT CONTROL - GTN =================
 @bot.command()
 async def givepointsgtn(ctx, member: discord.Member, amount: int):
     if not ctx.author.guild_permissions.administrator:
@@ -482,6 +496,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 bot.run(TOKEN)
+
 
 
 
