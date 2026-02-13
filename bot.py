@@ -443,16 +443,18 @@ async def on_message(message):
                 gtn_number = None
 
             elif guess < gtn_number:
-                gtn_low = max(gtn_low, guess)
-                await message.channel.send(embed=embed_msg("🔼 Higher!", "Try a bigger number."))
+    gtn_low = max(gtn_low, guess)
+    await message.channel.send(embed=embed_msg("🔼 Higher!", "Try a bigger number."))
 
-            else:
-                gtn_high = min(gtn_high, guess)
-                await message.channel.send(embed=embed_msg("🔽 Lower!", "Try a smaller number."))
+else:
+    gtn_high = min(gtn_high, guess)
+    await message.channel.send(embed=embed_msg("🔽 Lower!", "Try a smaller number."))
+
 
     await bot.process_commands(message)
 
 bot.run(TOKEN)
+
 
 
 
