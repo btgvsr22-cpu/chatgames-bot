@@ -222,16 +222,8 @@ async def removepointsmc(ctx, member: discord.Member, amount: int):
     ))
 
 # ================= GTN =================
-
-gtn_channel_id = None
-gtn_running = False
-gtn_number = None
-gtn_low = None
-gtn_high = None
-gtn_last_guess_time = {}
-
-SPAM_COOLDOWN = 2  # seconds
-
+import time
+gtn_cooldowns = {}
 
 @bot.command()
 @has_game_role()
@@ -245,12 +237,12 @@ async def setgtn(ctx, channel: discord.TextChannel):
 @has_game_role()
 async def srtgtn(ctx):
     global gtn_running, gtn_number, gtn_low, gtn_high
-
     if not gtn_channel_id:
         return await ctx.send(embed=embed_msg("❌ Error", "Set GTN channel first.", discord.Color.red()))
 
     gtn_running = True
 
+    # RANDOM RANGE LOGIC (3 digit or 4 digit tight ranges)
     digits = random.choice([3, 4])
 
     if digits == 3:
@@ -265,10 +257,7 @@ async def srtgtn(ctx):
     gtn_number = random.randint(gtn_low, gtn_high)
 
     channel = ctx.guild.get_channel(gtn_channel_id)
-    await channel.send(embed=embed_msg(
-        "🎯 Guess The Number",
-        f"Game started!\nRange: **{gtn_low} - {gtn_high}**"
-    ))
+    await channel.send(embed=embed_msg("🎯 Guess The Number", f"Game started! Range: {gtn_low} - {gtn_high}"))
 
 
 @bot.command()
@@ -300,6 +289,51 @@ async def lbgtn(ctx):
         desc += f"**{i}.** <@{uid}> → `{score}`\n"
 
     await ctx.send(embed=embed_msg("🏆 GTN Leaderboard", desc))
+
+
+# ================= GTN GUESS LISTENER =================
+@bot.event
+async def on_message(message):
+    await bot.process_commands(message)
+
+    global gtn_running, gtn_number
+
+    if message.author.bot:
+        return
+
+    if gtn_running and message.channel.id == gtn_channel_id and message.content.isdigit():
+
+        # anti spam protection (2 sec)
+        now = time.time()
+        if message.author.id in gtn_cooldowns and now - gtn_cooldowns[message.author.id] < 2:
+            return
+        gtn_cooldowns[message.author.id] = now
+
+        guess = int(message.content)
+
+        # correct guess
+        if guess == gtn_number:
+            score = add_gtn_point(message.author.id)
+            await message.channel.send(
+                embed=embed_msg("🎉 Correct Guess!", f"{message.author.mention} now has `{score}` wins!")
+            )
+            gtn_running = False
+            gtn_number = None
+            return
+
+        # distance hint system
+        distance = abs(guess - gtn_number)
+
+        if distance > 100:
+            msg = "📉 Too Far!"
+        elif distance > 70:
+            msg = "📊 Far!"
+        elif distance > 50:
+            msg = "📈 Close!"
+        else:
+            msg = "🔥 Very Close!"
+
+        await message.channel.send(embed=embed_msg("🎯 Hint", msg))
 
 
 # -------- LISTENER --------
@@ -490,6 +524,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 bot.run(TOKEN)
+
 
 
 
