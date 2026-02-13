@@ -351,6 +351,18 @@ async def on_message(message):
     if message.author.bot:
         return
 
+# -------- GTN LISTENER --------
+gtn_last_guess_time = {}
+SPAM_COOLDOWN = 2
+
+@bot.event
+async def on_message(message):
+
+    if message.author.bot:
+        return
+
+    global gtn_running, gtn_number
+
     if gtn_running and message.channel.id == gtn_channel_id:
 
         if message.content.isdigit():
@@ -532,6 +544,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 bot.run(TOKEN)
+
 
 
 
