@@ -289,6 +289,13 @@ async def lbgtn(ctx):
         desc += f"**{i}.** <@{uid}> → `{score}`\n"
 
     await ctx.send(embed=embed_msg("🏆 GTN Leaderboard", desc))
+@bot.command()
+@has_game_role()
+async def gtnanswer(ctx):
+    if not gtn_running or gtn_number is None:
+        return await ctx.send(embed=embed_msg("❌ No Game", "No GTN game is running.", discord.Color.red()))
+
+    await ctx.send(embed=embed_msg("🎯 Current Answer", f"The number is **{gtn_number}**"))
 
 
 # ================= GTN GUESS LISTENER =================
@@ -475,6 +482,7 @@ async def help(ctx):
 `*srtgtn`
 `*stopgtn`
 `*clearlbgtn`
+`*gtnanswer`
 """,
             inline=False
         )
@@ -524,6 +532,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 bot.run(TOKEN)
+
 
 
 
