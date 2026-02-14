@@ -251,8 +251,23 @@ async def help(ctx):
     embed = discord.Embed(title="🎮 NEXUS Game System", color=discord.Color.gold())
     is_m = any(role.id == GAME_MANAGER_ROLE_ID for role in ctx.author.roles)
     if is_m:
-        embed.add_field(name="🛠️ Manager", value="`*setmclines`, `*startmcline`, `*stopmcline`\n`*setgtn`, `*srtgtn`, `*stopgtn`, `*hint`, `*gtnanswer` ", inline=False)
-    embed.add_field(name="🌍 Public", value="`*lbmclines`, `*lbgtn`, `*help` ", inline=False)
+        embed.add_field(name="🛠️ Manager", value="`*setmclines`, 
+        `*startmcline`,
+        `*stopmcline`\n
+        `*setgtn`, 
+        `*srtgtn`,
+        `*stopgtn`, 
+        `*hint`, 
+        `*gtnanswer` ",
+        
+        inline=False)
+        
+    embed.add_field(name="🌍 Public", 
+value="`*lbmclines`, 
+       `*lbgtn`, 
+       `*help` ", 
+    inline=False)
     await ctx.send(embed=embed)
 
 bot.run(TOKEN)
+
