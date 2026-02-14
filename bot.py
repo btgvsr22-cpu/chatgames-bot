@@ -311,12 +311,12 @@ async def help(ctx):
             "• `*setmclines`\n"
             "• `*startmcline`\n"
             "• `*stopmcline`\n"
-            "• `*clearlbmclines`"
+            "• `*clearlbmclines`\n"
             "• `*setgtn`\n"
             "• `*srtgtn`\n"
             "• `*stopgtn`\n"
             "• `*hint`\n"
-            "• `*gtnanswer`"
+            "• `*gtnanswer`\n"
             "• `*clearlbgtn`"
         ), inline=False)
 
@@ -329,4 +329,5 @@ async def help(ctx):
     await ctx.send(embed=embed)
 
 bot.run(TOKEN)
+
 
