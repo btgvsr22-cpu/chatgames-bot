@@ -1,18 +1,16 @@
 import os
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 import random
 import sqlite3
 import re
+import time
 
 # ================= CONFIG =================
 TOKEN = os.getenv("DISCORD_TOKEN")
-
 GAME_MANAGER_ROLE_ID = 1468173295760314473
 OWNER_ID = 1448709644091527363
-
 DB_FILE = "/data/bot_data.db"
-# =========================================
 
 intents = discord.Intents.default()
 intents.members = True
@@ -22,22 +20,30 @@ bot = commands.Bot(
     command_prefix="*",
     intents=intents,
     help_command=None,
-    activity=discord.Game(name="NEXUS Chat Game")
+    activity=discord.Game(name="NEXUS Chat Games")
 )
+
+# ================= DATABASE =================
+conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+c = conn.cursor()
+c.execute("CREATE TABLE IF NOT EXISTS points (user_id TEXT PRIMARY KEY, score INTEGER)")
+c.execute("CREATE TABLE IF NOT EXISTS gtn_points (user_id TEXT PRIMARY KEY, score INTEGER)")
+c.execute("CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT)")
+conn.commit()
 
 # ================= GLOBALS =================
 game_running = False
 current_answer = None
-
 gtn_running = False
 gtn_number = None
 gtn_channel_id = None
 gtn_low = 0
-gtn_high = 9999
+gtn_high = 0
+gtn_cooldowns = {}
 
-# ================= SENTENCES =================
+# ================= ALL 20 MCLINES SENTENCES (RESTORED) =================
 sentences = [
-    "I was mining deep underground when a creeper exploded and scared me badly",
+     "I was mining deep underground when a creeper exploded and scared me badly",
     "After exploring caves for a long time I finally found diamonds",
     "The village survived the raid because the iron golem fought bravely",
     "I entered the nether without preparation and learned my lesson quickly",
@@ -88,25 +94,11 @@ sentences = [
 ]
 
 # ================= HELPERS =================
-def reverse_sentence(sentence):
-    return sentence[::-1]
-
-def embed_msg(title, description, color=discord.Color.gold()):
-    return discord.Embed(title=title, description=description, color=color)
-
+def reverse_sentence(sentence): return sentence[::-1]
+def embed_msg(title, description, color=discord.Color.gold()): return discord.Embed(title=title, description=description, color=color)
 def has_game_role():
-    async def predicate(ctx):
-        return any(role.id == GAME_MANAGER_ROLE_ID for role in ctx.author.roles)
+    async def predicate(ctx): return any(role.id == GAME_MANAGER_ROLE_ID for role in ctx.author.roles)
     return commands.check(predicate)
-
-# ================= DATABASE =================
-conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-c = conn.cursor()
-
-c.execute("CREATE TABLE IF NOT EXISTS points (user_id TEXT PRIMARY KEY, score INTEGER)")
-c.execute("CREATE TABLE IF NOT EXISTS gtn_points (user_id TEXT PRIMARY KEY, score INTEGER)")
-c.execute("CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT)")
-conn.commit()
 
 def add_point(user_id, amount=1):
     c.execute("SELECT score FROM points WHERE user_id = ?", (str(user_id),))
@@ -124,24 +116,7 @@ def add_gtn_point(user_id, amount=1):
     conn.commit()
     return new_score
 
-# ================= 5 MINUTE HINT LOOP =================
-@tasks.loop(minutes=5)
-async def gtn_hint_loop():
-    if gtn_running and gtn_channel_id:
-        channel = bot.get_channel(gtn_channel_id)
-        if channel:
-            embed = embed_msg(
-                "⏳ 5 Minute Hint",
-                f"The number is between *{gtn_low}* and *{gtn_high}*"
-            )
-            await channel.send(embed=embed)
-
-@bot.event
-async def on_ready():
-    if not gtn_hint_loop.is_running():
-        gtn_hint_loop.start()
-
-# ================= MCLINES =================
+# ================= MCLINES COMMANDS =================
 @bot.command()
 @has_game_role()
 async def setmclines(ctx, channel: discord.TextChannel):
@@ -153,256 +128,91 @@ async def setmclines(ctx, channel: discord.TextChannel):
 @has_game_role()
 async def startmcline(ctx):
     global game_running, current_answer
-    if game_running:
-        return await ctx.send(embed=embed_msg("⚠️ Already Running", "MCLINES is already active.", discord.Color.red()))
-
+    if game_running: return await ctx.send(embed=embed_msg("⚠️ Active", "An MCLINES game is already running!", discord.Color.red()))
     c.execute("SELECT value FROM config WHERE key = ?", ("game_channel",))
     row = c.fetchone()
-    if not row:
-        return await ctx.send(embed=embed_msg("❌ Error", "Set a MCLINES channel first.", discord.Color.red()))
-
-    channel = ctx.guild.get_channel(int(row[0]))
+    if not row: return await ctx.send("❌ Set MCLINES channel first.")
+    channel = bot.get_channel(int(row[0]))
     current_answer = random.choice(sentences)
     game_running = True
-
     await channel.send(embed=embed_msg("🎮 Reverse This", f"{reverse_sentence(current_answer)}"))
 
 @bot.command()
 @has_game_role()
 async def stopmcline(ctx):
     global game_running, current_answer
-    game_running = False
-    current_answer = None
+    game_running, current_answer = False, None
     await ctx.send(embed=embed_msg("🛑 Stopped", "MCLINES stopped.", discord.Color.red()))
 
-@bot.command()
-@has_game_role()
-async def clearlbmclines(ctx):
-    c.execute("DELETE FROM points")
-    conn.commit()
-    await ctx.send(embed=embed_msg("🗑️ Cleared", "MCLINES leaderboard cleared."))
-
-@bot.command()
-async def lbmclines(ctx):
-    c.execute("SELECT user_id, score FROM points ORDER BY score DESC LIMIT 10")
-    rows = c.fetchall()
-    if not rows:
-        return await ctx.send(embed=embed_msg("📭 Empty", "Leaderboard is empty."))
-
-    desc = ""
-    for i, (uid, score) in enumerate(rows, 1):
-        desc += f"*{i}.* <@{uid}> → {score}\n"
-
-    await ctx.send(embed=embed_msg("🏆 MCLINES Leaderboard", desc))
-
-# ================= ADMIN POINT CONTROL - MCLINES =================
-@bot.command()
-async def givepointsmc(ctx, member: discord.Member, amount: int):
-    if not ctx.author.guild_permissions.administrator:
-        return await ctx.send(embed=embed_msg("❌ No Permission", "Admin only command.", discord.Color.red()))
-
-    score = add_point(member.id, amount)
-    await ctx.send(embed=embed_msg("✅ Points Added (MCLINES)", f"{member.mention} now has {score} points."))
-
-
-@bot.command()
-async def bulkpointsmc(ctx, amount: int, *members: discord.Member):
-    if not ctx.author.guild_permissions.administrator:
-        return await ctx.send(embed=embed_msg("❌ No Permission", "Admin only command.", discord.Color.red()))
-
-    if not members:
-        return await ctx.send(embed=embed_msg("⚠️ Error", "Mention at least one user.", discord.Color.red()))
-
-    desc = ""
-    for member in members:
-        score = add_point(member.id, amount)
-        desc += f"{member.mention} → {score} points\n"
-
-    await ctx.send(embed=embed_msg("✅ Bulk Points Added (MCLINES)", desc))
-
-@bot.command()
-async def removepointsmc(ctx, member: discord.Member, amount: int):
-    if not ctx.author.guild_permissions.administrator:
-        return await ctx.send(embed=embed_msg("❌ No Permission", "Admin only command.", discord.Color.red()))
-
-    c.execute("SELECT score FROM points WHERE user_id = ?", (str(member.id),))
-    row = c.fetchone()
-    current = row[0] if row else 0
-    new_score = max(0, current - amount)
-
-    c.execute("INSERT OR REPLACE INTO points (user_id, score) VALUES (?, ?)", (str(member.id), new_score))
-    conn.commit()
-
-    await ctx.send(embed=embed_msg(
-        "➖ Points Removed (MCLINES)",
-        f"{member.mention} now has {new_score} points."
-    ))
-
-# ================= GTN =================
+# ================= GTN COMMANDS =================
 @bot.command()
 @has_game_role()
 async def setgtn(ctx, channel: discord.TextChannel):
-    global gtn_channel_id
-    gtn_channel_id = channel.id
+    c.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("gtn_channel", str(channel.id)))
+    conn.commit()
     await ctx.send(embed=embed_msg("🎯 GTN Channel Set", f"{channel.mention}"))
 
 @bot.command()
 @has_game_role()
-async def srtgtn(ctx):
-    global gtn_running, gtn_number, gtn_low, gtn_high
-    if not gtn_channel_id:
-        return await ctx.send(embed=embed_msg("❌ Error", "Set GTN channel first.", discord.Color.red()))
+async def srtgtn(ctx, low: int = 0, high: int = 1000):
+    global gtn_running, gtn_number, gtn_low, gtn_high, gtn_channel_id
+    if gtn_running: return await ctx.send(embed=embed_msg("⚠️ Active", "A GTN game is already running!", discord.Color.red()))
+    c.execute("SELECT value FROM config WHERE key = ?", ("gtn_channel",))
+    row = c.fetchone()
+    if row: gtn_channel_id = int(row[0])
+    if not gtn_channel_id: return await ctx.send("❌ Set GTN channel first.")
+    gtn_running, gtn_number, gtn_low, gtn_high = True, random.randint(low, high), low, high
+    channel = bot.get_channel(gtn_channel_id)
+    await channel.send(embed=embed_msg("🎯 GTN Started!", f"Guess the number between **{low}** and **{high}**!"))
 
-    gtn_running = True
-    gtn_number = random.randint(0, 9999)
-    gtn_low = 0
-    gtn_high = 9999
+@bot.command()
+@has_game_role()
+async def hint(ctx):
+    global gtn_running, gtn_low, gtn_high
+    if not gtn_running: return await ctx.send("❌ No active game.")
+    remaining = gtn_high - gtn_low
+    if remaining <= 15: return await ctx.send("⚠️ Range is too narrow for a hint!")
+    await ctx.send(embed=embed_msg("🛰️ GTN Hint", f"Range: **{gtn_low}** — **{gtn_high}**\nLeft: `{remaining}`"))
 
-    channel = ctx.guild.get_channel(gtn_channel_id)
-    await channel.send(embed=embed_msg("🎯 Guess The Number", "Game started! Range: 0 - 9999"))
+@bot.command()
+@has_game_role()
+async def gtnanswer(ctx):
+    global gtn_running, gtn_number
+    if not gtn_running: return await ctx.send("❌ No active game.")
+    try:
+        await ctx.author.send(embed=embed_msg("🤫 Answer", f"The number is: **{gtn_number}**"))
+        await ctx.message.add_reaction("✅")
+    except: await ctx.send("❌ Open your DMs!")
 
 @bot.command()
 @has_game_role()
 async def stopgtn(ctx):
     global gtn_running, gtn_number
-    gtn_running = False
-    gtn_number = None
+    gtn_running, gtn_number = False, None
     await ctx.send(embed=embed_msg("🛑 Stopped", "GTN stopped.", discord.Color.red()))
 
+# ================= LEADERBOARDS =================
 @bot.command()
-@has_game_role()
-async def clearlbgtn(ctx):
-    c.execute("DELETE FROM gtn_points")
-    conn.commit()
-    await ctx.send(embed=embed_msg("🗑️ Cleared", "GTN leaderboard cleared."))
+async def lbmclines(ctx):
+    c.execute("SELECT user_id, score FROM points ORDER BY score DESC LIMIT 10")
+    rows = c.fetchall()
+    desc = "\n".join([f"*{i+1}.* <@{uid}> → {score}" for i, (uid, score) in enumerate(rows)])
+    await ctx.send(embed=embed_msg("🏆 MCLINES Leaderboard", desc or "Empty"))
 
 @bot.command()
 async def lbgtn(ctx):
     c.execute("SELECT user_id, score FROM gtn_points ORDER BY score DESC LIMIT 10")
     rows = c.fetchall()
-    if not rows:
-        return await ctx.send(embed=embed_msg("📭 Empty", "GTN leaderboard is empty."))
-
-    desc = ""
-    for i, (uid, score) in enumerate(rows, 1):
-        desc += f"*{i}.* <@{uid}> → {score}\n"
-
-    await ctx.send(embed=embed_msg("🏆 GTN Leaderboard", desc))
-
-# ================= ADMIN POINT CONTROL - GTN =================
-@bot.command()
-async def givepointsgtn(ctx, member: discord.Member, amount: int):
-    if not ctx.author.guild_permissions.administrator:
-        return await ctx.send(embed=embed_msg("❌ No Permission", "Admin only command.", discord.Color.red()))
-
-    score = add_gtn_point(member.id, amount)
-    await ctx.send(embed=embed_msg("✅ Points Added (GTN)", f"{member.mention} now has {score} points."))
-
-
-@bot.command()
-async def bulkpointsgtn(ctx, amount: int, *members: discord.Member):
-    if not ctx.author.guild_permissions.administrator:
-        return await ctx.send(embed=embed_msg("❌ No Permission", "Admin only command.", discord.Color.red()))
-
-    if not members:
-        return await ctx.send(embed=embed_msg("⚠️ Error", "Mention at least one user.", discord.Color.red()))
-
-    desc = ""
-    for member in members:
-        score = add_gtn_point(member.id, amount)
-        desc += f"{member.mention} → {score} points\n"
-
-    await ctx.send(embed=embed_msg("✅ Bulk Points Added (GTN)", desc))
-
-@bot.command()
-async def removepointsgtn(ctx, member: discord.Member, amount: int):
-    if not ctx.author.guild_permissions.administrator:
-        return await ctx.send(embed=embed_msg("❌ No Permission", "Admin only command.", discord.Color.red()))
-
-    c.execute("SELECT score FROM gtn_points WHERE user_id = ?", (str(member.id),))
-    row = c.fetchone()
-    current = row[0] if row else 0
-    new_score = max(0, current - amount)
-
-    c.execute("INSERT OR REPLACE INTO gtn_points (user_id, score) VALUES (?, ?)", (str(member.id), new_score))
-    conn.commit()
-
-    await ctx.send(embed=embed_msg(
-        "➖ Points Removed (GTN)",
-        f"{member.mention} now has {new_score} points."
-    ))
-
-# ================= HELP COMMAND =================
-@bot.command()
-async def help(ctx):
-
-    embed = discord.Embed(title="🎮 NEXUS Game System", color=discord.Color.gold())
-
-    # Admin Section
-    if ctx.author.guild_permissions.administrator:
-        embed.add_field(
-            name="👑 Admin Access Only",
-            value="Full administrative permissions.",
-            inline=False
-        )
-
-        embed.add_field(
-            name="⚙️ Admin Point Commands",
-            value="""
-*givepointsmc @user amount
-*bulkpointsmc amount @user1 @user2
-*removepointsmc @user amount
-
-*givepointsgtn @user amount
-*bulkpointsgtn amount @user1 @user2
-*removepointsgtn @user amount
-""",
-            inline=False
-        )
-
-    # Game Manager Section
-    if any(role.id == GAME_MANAGER_ROLE_ID for role in ctx.author.roles):
-        embed.add_field(
-            name="🎮 Game Manager Commands",
-            value="""
-*setmclines
-*startmcline
-*stopmcline
-*clearlbmclines
-*setgtn
-*srtgtn
-*stopgtn
-*clearlbgtn
-""",
-            inline=False
-        )
-
-    # Public Section
-    embed.add_field(
-        name="🌍 Public Commands",
-        value="""
-*lbmclines
-*lbgtn
-*help
-""",
-        inline=False
-    )
-
-    embed.set_footer(text="NEXUS Game Command System ✨")
-    await ctx.send(embed=embed)
-
-
+    desc = "\n".join([f"*{i+1}.* <@{uid}> → {score}" for i, (uid, score) in enumerate(rows)])
+    await ctx.send(embed=embed_msg("🏆 GTN Leaderboard", desc or "Empty"))
 
 # ================= MESSAGE LISTENER =================
 @bot.event
 async def on_message(message):
-    global game_running, current_answer
-    global gtn_running, gtn_number, gtn_low, gtn_high
+    global game_running, current_answer, gtn_running, gtn_number, gtn_low, gtn_high, gtn_channel_id
+    if message.author.bot: return
 
-    if message.author.bot:
-        return
-
-    # MCLINES
+    # MCLINES CHECK
     if game_running and current_answer:
         c.execute("SELECT value FROM config WHERE key = ?", ("game_channel",))
         row = c.fetchone()
@@ -410,33 +220,39 @@ async def on_message(message):
             norm = lambda t: re.sub(r"[^\w\s]", "", t.lower()).strip()
             if norm(message.content) == norm(current_answer):
                 score = add_point(message.author.id)
-                await message.channel.send(
-                    embed=embed_msg("🎉 Winner!", f"{message.author.mention} earned {score} points!")
-                )
-                game_running = False
-                current_answer = None
+                await message.channel.send(embed=embed_msg("🎉 Winner!", f"{message.author.mention} scored! Total: {score}"))
+                game_running, current_answer = False, None
 
-    # GTN
-    if gtn_running and message.channel.id == gtn_channel_id:
-        if message.content.isdigit():
-            guess = int(message.content)
-
-            if guess == gtn_number:
-                score = add_gtn_point(message.author.id)
-                await message.channel.send(
-                    embed=embed_msg("🎉 Correct Guess!", f"{message.author.mention} now has {score} wins!")
-                )
-                gtn_running = False
-                gtn_number = None
-
-            elif guess < gtn_number:
-                gtn_low = max(gtn_low, guess)
-                await message.channel.send(embed=embed_msg("🔼 Higher!", "Try a bigger number."))
-
-            else:
-                gtn_high = min(gtn_high, guess)
-                await message.channel.send(embed=embed_msg("🔽 Lower!", "Try a smaller number."))
+    # GTN CHECK
+    if gtn_running and message.channel.id == gtn_channel_id and message.content.isdigit():
+        now = time.time()
+        if now - gtn_cooldowns.get(message.author.id, 0) < 2: return
+        gtn_cooldowns[message.author.id] = now
+        guess = int(message.content)
+        if guess == gtn_number:
+            score = add_gtn_point(message.author.id)
+            await message.channel.send(embed=embed_msg("🎉 Correct!", f"{message.author.mention} won! Total: {score}"))
+            gtn_running, gtn_number = False, None
+            return
+        if guess < gtn_number: gtn_low = max(gtn_low, guess)
+        elif guess > gtn_number: gtn_high = min(gtn_high, guess)
+        diff = abs(guess - gtn_number)
+        if diff <= 10: text, col = "🔥 RED HOT!", discord.Color.red()
+        elif diff <= 50: text, col = "✨ Very Close!", discord.Color.orange()
+        elif diff <= 150: text, col = "📈 Getting Closer...", discord.Color.gold()
+        else: text, col = "❄️ Cold.", discord.Color.blue()
+        await message.channel.send(embed=embed_msg(text, "Keep guessing!", col))
 
     await bot.process_commands(message)
+
+# ================= HELP =================
+@bot.command()
+async def help(ctx):
+    embed = discord.Embed(title="🎮 NEXUS Game System", color=discord.Color.gold())
+    is_m = any(role.id == GAME_MANAGER_ROLE_ID for role in ctx.author.roles)
+    if is_m:
+        embed.add_field(name="🛠️ Manager", value="`*setmclines`, `*startmcline`, `*stopmcline`\n`*setgtn`, `*srtgtn`, `*stopgtn`, `*hint`, `*gtnanswer` ", inline=False)
+    embed.add_field(name="🌍 Public", value="`*lbmclines`, `*lbgtn`, `*help` ", inline=False)
+    await ctx.send(embed=embed)
 
 bot.run(TOKEN)
