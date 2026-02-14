@@ -41,7 +41,7 @@ gtn_low = 0
 gtn_high = 0
 gtn_cooldowns = {}
 
-# ================= ALL 20 MCLINES SENTENCES =================
+# ================= ALL 45+ MCLINES SENTENCES =================
 sentences = [
       "I was mining deep underground when a creeper exploded and scared me badly",
     "After exploring caves for a long time I finally found diamonds",
@@ -181,7 +181,12 @@ async def startmcline(ctx):
 async def stopmcline(ctx):
     global game_running; game_running = False
     await ctx.send("🛑 MCLINES stopped.")
-
+@bot.command()
+@has_game_role()
+async def clearlbmclines(ctx):
+    c.execute("DELETE FROM points")
+    conn.commit()
+    await ctx.send(embed=embed_msg("🧹 Reset", "MCLines Leaderboard wiped by Manager.", discord.Color.red()))
 # ================= GTN COMMANDS =================
 @bot.command()
 @has_game_role()
@@ -225,7 +230,12 @@ async def gtnanswer(ctx):
 async def stopgtn(ctx):
     global gtn_running; gtn_running = False
     await ctx.send("🛑 GTN stopped.")
-
+@bot.command()
+@has_game_role()
+async def clearlbgtn(ctx):
+    c.execute("DELETE FROM gtn_points")
+    conn.commit()
+    await ctx.send(embed=embed_msg("🧹 Reset", "GTN Leaderboard wiped by Manager.", discord.Color.red()))
 # ================= MESSAGE LISTENER =================
 @bot.event
 async def on_message(message):
@@ -301,11 +311,13 @@ async def help(ctx):
             "• `*setmclines`\n"
             "• `*startmcline`\n"
             "• `*stopmcline`\n"
+            "• `*clearlbmclines`"
             "• `*setgtn`\n"
             "• `*srtgtn`\n"
             "• `*stopgtn`\n"
             "• `*hint`\n"
             "• `*gtnanswer`"
+            "• `*clearlbgtn`"
         ), inline=False)
 
     embed.add_field(name="🌍 Player Commands", value=(
@@ -317,3 +329,4 @@ async def help(ctx):
     await ctx.send(embed=embed)
 
 bot.run(TOKEN)
+
