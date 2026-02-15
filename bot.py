@@ -320,7 +320,7 @@ async def help(ctx):
             "• `*stopgtn`\n"
             "• `*hint`\n"
             "• `*gtnanswer`\n"
-            "• `*clearlbgtn`"
+            "• `*clearlbgtn`\n"
             "• `*setquiz #channel`\n"
             "• `*startquiz`\n"
             "• `*stopquiz`\n"
@@ -490,6 +490,7 @@ async def bulkpointsquiz(ctx, amount:int):
 
 
 bot.run(TOKEN)
+
 
 
 
