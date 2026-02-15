@@ -236,6 +236,7 @@ async def clearlbgtn(ctx):
     c.execute("DELETE FROM gtn_points")
     conn.commit()
     await ctx.send(embed=embed_msg("🧹 Reset", "GTN Leaderboard wiped by Manager.", discord.Color.red()))
+    
 # ================= MESSAGE LISTENER =================
 @bot.event
 async def on_message(message):
@@ -292,25 +293,25 @@ async def on_message(message):
 
 
     # ================= QUIZ =================
-if quiz_running and message.channel.id == quiz_channel_id:
+    if quiz_running and message.channel.id == quiz_channel_id:
 
-    norm = lambda t: re.sub(r"[^\w\s]", "", t.lower()).strip()
+        norm = lambda t: re.sub(r"[^\w\s]", "", t.lower()).strip()
 
-    if norm(message.content) == norm(quiz_answer):
-        s = add_quiz_point(message.author.id)
+        if norm(message.content) == norm(quiz_answer):
+            s = add_quiz_point(message.author.id)
 
-        await message.channel.send(embed=embed_msg(
-            "🎉 Correct!",
-            f"{message.author.mention} answered correctly!\nScore: **{s}**",
-            discord.Color.green()
-        ))
+            await message.channel.send(embed=embed_msg(
+                "🎉 Correct!",
+                f"{message.author.mention} answered correctly!\nScore: **{s}**",
+                discord.Color.green()
+            ))
 
-        quiz_running = False
-        stop_game_lock()
+            quiz_running = False
+            stop_game_lock()
 
-            
 
     await bot.process_commands(message)
+
 
 
 # ================= LEADERBOARDS =================
@@ -523,6 +524,7 @@ async def bulkpointsquiz(ctx, amount:int):
     ))
 
 bot.run(TOKEN)
+
 
 
 
