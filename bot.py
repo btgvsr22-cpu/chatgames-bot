@@ -239,9 +239,14 @@ async def clearlbgtn(ctx):
 # ================= MESSAGE LISTENER =================
 @bot.event
 async def on_message(message):
-    global game_running, current_answer, gtn_running, gtn_number, gtn_low, gtn_high, gtn_channel_id
-    if message.author.bot: return
+    global game_running, current_answer
+    global gtn_running, gtn_number, gtn_low, gtn_high, gtn_channel_id
+    global quiz_running, quiz_answer, quiz_channel_id
 
+    if message.author.bot:
+        return
+
+    # ================= MCLINES =================
     if game_running and current_answer:
         c.execute("SELECT value FROM config WHERE key = ?", ("game_channel",))
         row = c.fetchone()
@@ -252,27 +257,43 @@ async def on_message(message):
                 await message.channel.send(f"🎉 {message.author.mention} won! Total: {s}")
                 game_running = False
 
+
+    # ================= GTN =================
     if gtn_running and message.channel.id == gtn_channel_id and message.content.isdigit():
         now = time.time()
-        if now - gtn_cooldowns.get(message.author.id, 0) < 2: return
-        gtn_cooldowns[message.author.id] = now
-        guess = int(message.content)
-        if guess == gtn_number:
-            s = add_gtn_point(message.author.id)
-            await message.channel.send(f"🎉 {message.author.mention} guessed {gtn_number}! Wins: {s}")
-            gtn_running = False
-        else:
-            if guess < gtn_number: gtn_low = max(gtn_low, guess)
-            else: gtn_high = min(gtn_high, guess)
-            diff = abs(guess - gtn_number)
-            if diff <= 10: txt, col = "🔥 RED HOT!", discord.Color.red()
-            elif diff <= 50: txt, col = "✨ Very Close!", discord.Color.orange()
-            elif diff <= 150: txt, col = "📈 Getting Closer...", discord.Color.gold()
-            else: txt, col = "❄️ Cold.", discord.Color.blue()
-            await message.channel.send(embed=embed_msg(txt, "Keep guessing!", col))
-    # ================= QUIZ ANSWER CHECK =================
-    global quiz_running, quiz_answer, quiz_channel_id
+
+        if now - gtn_cooldowns.get(message.author.id, 0) >= 2:
+            gtn_cooldowns[message.author.id] = now
+
+            guess = int(message.content)
+
+            if guess == gtn_number:
+                s = add_gtn_point(message.author.id)
+                await message.channel.send(f"🎉 {message.author.mention} guessed {gtn_number}! Wins: {s}")
+                gtn_running = False
+            else:
+                if guess < gtn_number:
+                    gtn_low = max(gtn_low, guess)
+                else:
+                    gtn_high = min(gtn_high, guess)
+
+                diff = abs(guess - gtn_number)
+
+                if diff <= 10:
+                    txt, col = "🔥 RED HOT!", discord.Color.red()
+                elif diff <= 50:
+                    txt, col = "✨ Very Close!", discord.Color.orange()
+                elif diff <= 150:
+                    txt, col = "📈 Getting Closer...", discord.Color.gold()
+                else:
+                    txt, col = "❄️ Cold.", discord.Color.blue()
+
+                await message.channel.send(embed=embed_msg(txt, "Keep guessing!", col))
+
+
+    # ================= QUIZ =================
     if quiz_running and message.channel.id == quiz_channel_id:
+
         norm = lambda t: re.sub(r"[^\w\s]", "", t.lower()).strip()
 
         if norm(message.content) == norm(quiz_answer):
@@ -293,6 +314,7 @@ async def on_message(message):
             ))
 
     await bot.process_commands(message)
+
 
 # ================= LEADERBOARDS =================
 @bot.command()
@@ -504,6 +526,7 @@ async def bulkpointsquiz(ctx, amount:int):
     ))
 
 bot.run(TOKEN)
+
 
 
 
