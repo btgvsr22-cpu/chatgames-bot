@@ -270,6 +270,27 @@ async def on_message(message):
             elif diff <= 150: txt, col = "📈 Getting Closer...", discord.Color.gold()
             else: txt, col = "❄️ Cold.", discord.Color.blue()
             await message.channel.send(embed=embed_msg(txt, "Keep guessing!", col))
+    # ================= QUIZ ANSWER CHECK =================
+    global quiz_running, quiz_answer, quiz_channel_id
+    if quiz_running and message.channel.id == quiz_channel_id:
+        norm = lambda t: re.sub(r"[^\w\s]", "", t.lower()).strip()
+
+        if norm(message.content) == norm(quiz_answer):
+            s = add_quiz_point(message.author.id)
+
+            await message.channel.send(embed=embed_msg(
+                "🎉 Correct!",
+                f"{message.author.mention} answered correctly!\nScore: **{s}**",
+                discord.Color.green()
+            ))
+
+            q = random.choice(quiz_questions)
+            quiz_answer = q[1]
+
+            await message.channel.send(embed=embed_msg(
+                "🧠 Next Question",
+                q[0]
+            ))
 
     await bot.process_commands(message)
 
@@ -482,35 +503,8 @@ async def bulkpointsquiz(ctx, amount:int):
         f"Added **{amount}** quiz points to everyone."
     ))
 
-
-# ================= MESSAGE LISTENER =================
-# PASTE THIS BLOCK INSIDE YOUR EXISTING on_message EVENT
-# (PLACE ABOVE await bot.process_commands(message))
-
-    global quiz_running, quiz_answer, quiz_channel_id
-    if quiz_running and message.channel.id == quiz_channel_id:
-        norm = lambda t: re.sub(r"[^\w\s]", "", t.lower()).strip()
-
-        if norm(message.content) == norm(quiz_answer):
-            s = add_quiz_point(message.author.id)
-
-            await message.channel.send(embed=embed_msg(
-                "🎉 Correct!",
-                f"{message.author.mention} answered correctly!\nScore: **{s}**",
-                discord.Color.green()
-            ))
-
-            q = random.choice(quiz_questions)
-            quiz_answer = q[1]
-
-            await message.channel.send(embed=embed_msg(
-                "🧠 Next Question",
-                q[0]
-            ))
-
-
-
 bot.run(TOKEN)
+
 
 
 
