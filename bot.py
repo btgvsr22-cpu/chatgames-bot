@@ -303,31 +303,193 @@ async def help(ctx):
             "• `*removepointsmc`\n"
             "• `*givepointsgtn`\n"
             "• `*bulkpointsgtn`\n"
-            "• `*removepointsgtn`"
+            "• `*removepointsgtn`\n"
+            "• `*givepointsquiz`\n"
+            "• `*bulkpointsquiz`\n"
+            "• `*removepointsquiz`\n"
         ), inline=False)
 
     if is_manager:
         embed.add_field(name="🛠️ Manager Commands", value=(
-            "• `*setmclines`\n"
+            "• `*setmclines #channel`\n"
             "• `*startmcline`\n"
             "• `*stopmcline`\n"
             "• `*clearlbmclines`\n"
-            "• `*setgtn`\n"
-            "• `*srtgtn`\n"
+            "• `*setgtn #channel`\n"
+            "• `*srtgtn range`\n"
             "• `*stopgtn`\n"
             "• `*hint`\n"
             "• `*gtnanswer`\n"
             "• `*clearlbgtn`"
+            "• `*setquiz #channel`\n"
+            "• `*startquiz`\n"
+            "• `*stopquiz`\n"
+            "• `*clearquizlb`\n"
+            
         ), inline=False)
 
     embed.add_field(name="🌍 Player Commands", value=(
         "• `*lbmclines`\n"
         "• `*lbgtn`\n"
+        "• `*lbquiz`\n"
         "• `*help`"
     ), inline=False)
     
     await ctx.send(embed=embed)
 
+# ===================================== QUIZ DATABASE =====================================================================================
+c.execute("CREATE TABLE IF NOT EXISTS quiz_points (user_id TEXT PRIMARY KEY, score INTEGER)")
+conn.commit()
+
+# ================= QUIZ GLOBALS =================
+quiz_running = False
+quiz_answer = None
+quiz_channel_id = None
+
+# ================= QUIZ QUESTIONS =================
+quiz_questions = [
+    ("Which mob drops gunpowder?", "creeper"),
+    ("What ore is needed for netherite?", "ancient debris"),
+    ("Which mob steals blocks?", "enderman"),
+    ("Which item lets you fly?", "elytra"),
+    ("Which boss lives in the End?", "ender dragon"),
+    ("Which tool mines obsidian fastest?", "diamond pickaxe"),
+    ("Which villager sells enchanted books?", "librarian"),
+    ("Which block lets you set spawn?", "bed"),
+    ("Which mob shoots fireballs?", "ghast"),
+    ("What food do pandas eat?", "bamboo")
+]
+
+# ================= QUIZ POINT FUNCTION =================
+def add_quiz_point(user_id, amount=1):
+    c.execute("SELECT score FROM quiz_points WHERE user_id=?", (str(user_id),))
+    r = c.fetchone()
+    score = (r[0] if r else 0) + amount
+    c.execute("INSERT OR REPLACE INTO quiz_points VALUES (?,?)", (str(user_id), score))
+    conn.commit()
+    return score
+
+
+# ================= QUIZ COMMANDS =================
+@bot.command()
+@has_game_role()
+async def setquiz(ctx, channel: discord.TextChannel):
+    global quiz_channel_id
+    quiz_channel_id = channel.id
+    await ctx.send(embed=embed_msg("🧠 Quiz Channel Set", channel.mention))
+
+
+@bot.command()
+@has_game_role()
+async def startquiz(ctx):
+    global quiz_running, quiz_answer
+
+    ok, running = start_game_lock("Minecraft Quiz")
+    if not ok:
+        return await ctx.send(embed=embed_msg(
+            "⚠️ Game Running",
+            f"A game is already running → **{running}**",
+            discord.Color.red()
+        ))
+
+    if quiz_running:
+        stop_game_lock()
+        return await ctx.send(embed=embed_msg("⚠️ Already Running","Quiz already running",discord.Color.red()))
+
+    if not quiz_channel_id:
+        stop_game_lock()
+        return await ctx.send(embed=embed_msg("❌ Error","Set channel first",discord.Color.red()))
+
+    quiz_running = True
+    q = random.choice(quiz_questions)
+    quiz_answer = q[1]
+
+    await bot.get_channel(quiz_channel_id).send(
+        embed=embed_msg("🧠 Minecraft Quiz", q[0])
+    )
+
+
+@bot.command()
+@has_game_role()
+async def stopquiz(ctx):
+    global quiz_running
+    quiz_running = False
+    stop_game_lock()
+    await ctx.send(embed=embed_msg("🛑 Stopped","Quiz stopped.",discord.Color.red()))
+
+
+@bot.command()
+async def lbquiz(ctx):
+    c.execute("SELECT user_id,score FROM quiz_points ORDER BY score DESC LIMIT 10")
+    rows = c.fetchall()
+    txt = "\n".join([f"**{i+1}.** <@{u}> — {s}" for i,(u,s) in enumerate(rows)])
+    await ctx.send(embed=embed_msg("🏆 Quiz Leaderboard", txt or "Empty"))
+
+
+@bot.command()
+@has_game_role()
+async def clearquizlb(ctx):
+    c.execute("DELETE FROM quiz_points")
+    conn.commit()
+    await ctx.send(embed=embed_msg("🧹 Reset","Quiz leaderboard cleared.",discord.Color.red()))
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def givepointsquiz(ctx, member: discord.Member, amount:int):
+    s = add_quiz_point(member.id, amount)
+    await ctx.send(embed=embed_msg(
+        "✅ Points Added",
+        f"{member.mention} received **{amount}** points\nTotal: **{s}**"
+    ))
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def removepointsquiz(ctx, member: discord.Member, amount:int):
+    s = add_quiz_point(member.id, -amount)
+    await ctx.send(embed=embed_msg(
+        "❌ Points Removed",
+        f"{member.mention} lost **{amount}** points\nTotal: **{s}**"
+    ))
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def bulkpointsquiz(ctx, amount:int):
+    c.execute("UPDATE quiz_points SET score = score + ?", (amount,))
+    conn.commit()
+    await ctx.send(embed=embed_msg(
+        "📈 Bulk Added",
+        f"Added **{amount}** quiz points to everyone."
+    ))
+
+
+# ================= ADD INSIDE on_message =================
+# (place above bot.process_commands)
+
+    global quiz_running, quiz_answer, quiz_channel_id
+    if quiz_running and message.channel.id == quiz_channel_id:
+        norm = lambda t: re.sub(r"[^\w\s]", "", t.lower()).strip()
+        if norm(message.content) == norm(quiz_answer):
+            s = add_quiz_point(message.author.id)
+
+            await message.channel.send(embed=embed_msg(
+                "🎉 Correct!",
+                f"{message.author.mention} answered correctly!\nScore: **{s}**",
+                discord.Color.green()
+            ))
+
+            q = random.choice(quiz_questions)
+            quiz_answer = q[1]
+
+            await message.channel.send(embed=embed_msg(
+                "🧠 Next Question",
+                q[0]
+            ))
+
+
 bot.run(TOKEN)
+
 
 
