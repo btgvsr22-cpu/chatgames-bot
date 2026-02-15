@@ -174,7 +174,7 @@ async def startmcline(ctx):
     channel = bot.get_channel(int(row[0]))
     current_answer = random.choice(sentences)
     game_running = True
-    await channel.send(embed=embed_msg("🎮 Reverse This", f"{reverse_sentence(current_answer)}"))
+    await channel.send(embed=embed_msg("🎮 unscramble", f"{reverse_sentence(current_answer)}"))
 
 @bot.command()
 @has_game_role()
@@ -292,26 +292,23 @@ async def on_message(message):
 
 
     # ================= QUIZ =================
-    if quiz_running and message.channel.id == quiz_channel_id:
+if quiz_running and message.channel.id == quiz_channel_id:
 
-        norm = lambda t: re.sub(r"[^\w\s]", "", t.lower()).strip()
+    norm = lambda t: re.sub(r"[^\w\s]", "", t.lower()).strip()
 
-        if norm(message.content) == norm(quiz_answer):
-            s = add_quiz_point(message.author.id)
+    if norm(message.content) == norm(quiz_answer):
+        s = add_quiz_point(message.author.id)
 
-            await message.channel.send(embed=embed_msg(
-                "🎉 Correct!",
-                f"{message.author.mention} answered correctly!\nScore: **{s}**",
-                discord.Color.green()
-            ))
+        await message.channel.send(embed=embed_msg(
+            "🎉 Correct!",
+            f"{message.author.mention} answered correctly!\nScore: **{s}**",
+            discord.Color.green()
+        ))
 
-            q = random.choice(quiz_questions)
-            quiz_answer = q[1]
+        quiz_running = False
+        stop_game_lock()
 
-            await message.channel.send(embed=embed_msg(
-                "🧠 Next Question",
-                q[0]
-            ))
+            
 
     await bot.process_commands(message)
 
@@ -526,6 +523,7 @@ async def bulkpointsquiz(ctx, amount:int):
     ))
 
 bot.run(TOKEN)
+
 
 
 
