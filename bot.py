@@ -337,14 +337,31 @@ async def help(ctx):
     
     await ctx.send(embed=embed)
 
-# ===================================== QUIZ DATABASE =====================================================================================
+# ================= GLOBAL GAME LOCK (ADD ONCE IN GLOBAL SECTION) =================
+active_game = None
+
+def start_game_lock(name):
+    global active_game
+    if active_game is not None:
+        return False, active_game
+    active_game = name
+    return True, None
+
+def stop_game_lock():
+    global active_game
+    active_game = None
+
+
+# ================= QUIZ DATABASE =================
 c.execute("CREATE TABLE IF NOT EXISTS quiz_points (user_id TEXT PRIMARY KEY, score INTEGER)")
 conn.commit()
+
 
 # ================= QUIZ GLOBALS =================
 quiz_running = False
 quiz_answer = None
 quiz_channel_id = None
+
 
 # ================= QUIZ QUESTIONS =================
 quiz_questions = [
@@ -360,7 +377,8 @@ quiz_questions = [
     ("What food do pandas eat?", "bamboo")
 ]
 
-# ================= QUIZ POINT FUNCTION =================
+
+# ================= POINT SYSTEM =================
 def add_quiz_point(user_id, amount=1):
     c.execute("SELECT score FROM quiz_points WHERE user_id=?", (str(user_id),))
     r = c.fetchone()
@@ -370,7 +388,7 @@ def add_quiz_point(user_id, amount=1):
     return score
 
 
-# ================= QUIZ COMMANDS =================
+# ================= COMMANDS =================
 @bot.command()
 @has_game_role()
 async def setquiz(ctx, channel: discord.TextChannel):
@@ -398,7 +416,7 @@ async def startquiz(ctx):
 
     if not quiz_channel_id:
         stop_game_lock()
-        return await ctx.send(embed=embed_msg("❌ Error","Set channel first",discord.Color.red()))
+        return await ctx.send(embed=embed_msg("❌ Error","Set channel first using *setquiz",discord.Color.red()))
 
     quiz_running = True
     q = random.choice(quiz_questions)
@@ -465,12 +483,14 @@ async def bulkpointsquiz(ctx, amount:int):
     ))
 
 
-# ================= ADD INSIDE on_message =================
-# (place above bot.process_commands)
+# ================= MESSAGE LISTENER =================
+# PASTE THIS BLOCK INSIDE YOUR EXISTING on_message EVENT
+# (PLACE ABOVE await bot.process_commands(message))
 
     global quiz_running, quiz_answer, quiz_channel_id
     if quiz_running and message.channel.id == quiz_channel_id:
         norm = lambda t: re.sub(r"[^\w\s]", "", t.lower()).strip()
+
         if norm(message.content) == norm(quiz_answer):
             s = add_quiz_point(message.author.id)
 
@@ -489,7 +509,9 @@ async def bulkpointsquiz(ctx, amount:int):
             ))
 
 
+
 bot.run(TOKEN)
+
 
 
 
