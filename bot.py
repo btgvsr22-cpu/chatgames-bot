@@ -406,57 +406,58 @@ quiz_channel_id = None
 
 # ================= QUIZ QUESTIONS =================
 quiz_questions = [
-   ("What is the Overworld build height limit as of modern versions?", "320")
-("Which mob can pick up dropped items and equip armor?", "zombie")
-("What block is required to craft a respawn anchor?", "crying obsidian")
-("What is the minimum number of obsidian blocks needed for a Nether portal frame?", "10")
-("Which trident enchantment summons lightning during thunderstorms?", "channeling")
-("What is the blast resistance value of obsidian?", "1200")
-("Which mob drops phantom membranes?", "phantom")
-("Which wood type cannot be used to craft boats?", "crimson stems")
-("What is the default random tick speed?", "3")
-("Which potion is brewed using phantom membrane?", "slow falling")
-("Which structure can generate with a lodestone naturally?", "bastion remnant")
-("Which mob is effectively immune to arrows because it teleports away?", "enderman")
-("Which movable block emits light level 15?", "shroomlight")
-("What item repairs elytra?", "phantom membrane")
-("What is the rarest natural ore in the Overworld or Nether?", "ancient debris")
-("Which mob can naturally spawn wearing diamond armor?", "zombie")
-("How many bookshelves are required for maximum enchantment power?", "15")
-("Which mob turns into a witch when struck by lightning?", "villager")
-("What is the central item required to activate a conduit?", "heart of the sea")
-("Which block type can be waterlogged but is not a full block?", "slab")
-("What event grants the Hero of the Village effect?", "raid")
-("Which biome has no naturally spawning passive mobs?", "mushroom fields")
-("What item do piglins accept for bartering?", "gold ingot")
-("Which block blocks vibrations from reaching sculk sensors?", "wool")
-("What is the maximum obtainable haste level without commands?", "2")
-("Which mob creates wither roses when it kills other mobs?", "wither")
-("Which dimension has no natural water sources?", "nether")
-("Which plant is the fastest growing crop in the game?", "bamboo")
-("What is the maximum stack size for ender pearls?", "16")
-("Which mob can climb vertical walls?", "spider")
-("What do endermen refuse to teleport into?", "water")
-("What footwear allows walking on powder snow without sinking?", "leather boots")
-("Which structure can generate with allays inside cages?", "woodland mansion")
-("What item is consumed when copying an armor trim pattern?", "diamond")
-("Which mob variant can spawn riding a chicken?", "baby zombie")
-("What unused giant mob exists in the game files?", "giant")
-("What block is required to summon the Wither boss?", "soul sand")
-("How many blocks tall is an enderman?", "3")
-("Which food provides the highest saturation value?", "golden carrot")
-("In which biome do strays naturally spawn?", "snowy tundra")
-("What item is used to locate structures like mansions or monuments?", "explorer map")
-("What is the maximum beacon base size?", "9x9")
-("Which mob is attracted to turtle eggs and tries to destroy them?", "zombie")
-("What is the fastest tool type for mining obsidian?", "netherite pickaxe")
-("What effect does oxeye daisy suspicious stew give?", "regeneration")
-("Which block turns into dirt if broken without Silk Touch?", "grass block")
-("What item is used to breed striders?", "warped fungus")
-("Which mob becomes hostile only when you look directly at it?", "enderman")
-("Which mob is the only natural source of blaze rods?", "blaze")
+("What is the Overworld build height limit as of modern versions?", "320"),
+("Which mob can pick up dropped items and equip armor?", "zombie"),
+("What block is required to craft a respawn anchor?", "crying obsidian"),
+("What is the minimum number of obsidian blocks needed for a Nether portal frame?", "10"),
+("Which trident enchantment summons lightning during thunderstorms?", "channeling"),
+("What is the blast resistance value of obsidian?", "1200"),
+("Which mob drops phantom membranes?", "phantom"),
+("Which wood type cannot be used to craft boats?", "crimson stems"),
+("What is the default random tick speed?", "3"),
+("Which potion is brewed using phantom membrane?", "slow falling"),
+("Which structure can generate with a lodestone naturally?", "bastion remnant"),
+("Which mob is effectively immune to arrows because it teleports away?", "enderman"),
+("Which movable block emits light level 15?", "shroomlight"),
+("What item repairs elytra?", "phantom membrane"),
+("What is the rarest natural ore in the Overworld or Nether?", "ancient debris"),
+("Which mob can naturally spawn wearing diamond armor?", "zombie"),
+("How many bookshelves are required for maximum enchantment power?", "15"),
+("Which mob turns into a witch when struck by lightning?", "villager"),
+("What is the central item required to activate a conduit?", "heart of the sea"),
+("Which block type can be waterlogged but is not a full block?", "slab"),
+("What event grants the Hero of the Village effect?", "raid"),
+("Which biome has no naturally spawning passive mobs?", "mushroom fields"),
+("What item do piglins accept for bartering?", "gold ingot"),
+("Which block blocks vibrations from reaching sculk sensors?", "wool"),
+("What is the maximum obtainable haste level without commands?", "2"),
+("Which mob creates wither roses when it kills other mobs?", "wither"),
+("Which dimension has no natural water sources?", "nether"),
+("Which plant is the fastest growing crop in the game?", "bamboo"),
+("What is the maximum stack size for ender pearls?", "16"),
+("Which mob can climb vertical walls?", "spider"),
+("What do endermen refuse to teleport into?", "water"),
+("What footwear allows walking on powder snow without sinking?", "leather boots"),
+("Which structure can generate with allays inside cages?", "woodland mansion"),
+("What item is consumed when copying an armor trim pattern?", "diamond"),
+("Which mob variant can spawn riding a chicken?", "baby zombie"),
+("What unused giant mob exists in the game files?", "giant"),
+("What block is required to summon the Wither boss?", "soul sand"),
+("How many blocks tall is an enderman?", "3"),
+("Which food provides the highest saturation value?", "golden carrot"),
+("In which biome do strays naturally spawn?", "snowy tundra"),
+("What item is used to locate structures like mansions or monuments?", "explorer map"),
+("What is the maximum beacon base size?", "9x9"),
+("Which mob is attracted to turtle eggs and tries to destroy them?", "zombie"),
+("What is the fastest tool type for mining obsidian?", "netherite pickaxe"),
+("What effect does oxeye daisy suspicious stew give?", "regeneration"),
+("Which block turns into dirt if broken without Silk Touch?", "grass block"),
+("What item is used to breed striders?", "warped fungus"),
+("Which mob becomes hostile only when you look directly at it?", "enderman"),
+("Which mob is the only natural source of blaze rods?", "blaze"),
 ("What ingredient is required to craft an end crystal?", "ghast tear")
 ]
+
 
 
 # ================= POINT SYSTEM =================
@@ -564,6 +565,7 @@ async def bulkpointsquiz(ctx, amount:int):
     ))
 
 bot.run(TOKEN)
+
 
 
 
