@@ -564,7 +564,158 @@ async def bulkpointsquiz(ctx, amount:int):
         f"Added **{amount}** quiz points to everyone."
     ))
 
+# ================= UI GAME CONTROL PANEL =================
+from discord.ui import View, Button
+
+# ---------- START GAME PANEL ----------
+class StartGameView(View):
+    def __init__(self, ctx):
+        super().__init__(timeout=60)
+        self.ctx = ctx
+
+    async def interaction_check(self, interaction):
+        return any(r.id == GAME_MANAGER_ROLE_ID for r in interaction.user.roles)
+
+    @discord.ui.button(label="MCLINES", style=discord.ButtonStyle.green)
+    async def mclines(self, interaction, button):
+        await interaction.response.defer()
+        await self.ctx.invoke(bot.get_command("startmcline"))
+
+    @discord.ui.button(label="GTN", style=discord.ButtonStyle.blurple)
+    async def gtn(self, interaction, button):
+        await interaction.response.defer()
+        await self.ctx.invoke(bot.get_command("srtgtn"))
+
+    @discord.ui.button(label="QUIZ", style=discord.ButtonStyle.red)
+    async def quiz(self, interaction, button):
+        await interaction.response.defer()
+        await self.ctx.invoke(bot.get_command("startquiz"))
+
+
+@bot.command()
+@has_game_role()
+async def srtgame(ctx):
+    embed = embed_msg("🎮 Start Game Panel", "Click a game to start it")
+    await ctx.send(embed=embed, view=StartGameView(ctx))
+
+
+# ---------- STOP GAME PANEL ----------
+class StopGameView(View):
+    def __init__(self, ctx):
+        super().__init__(timeout=60)
+        self.ctx = ctx
+
+    async def interaction_check(self, interaction):
+        return any(r.id == GAME_MANAGER_ROLE_ID for r in interaction.user.roles)
+
+    @discord.ui.button(label="Stop MCLINES", style=discord.ButtonStyle.gray)
+    async def stop_mc(self, interaction, button):
+        await interaction.response.defer()
+        await self.ctx.invoke(bot.get_command("stopmcline"))
+
+    @discord.ui.button(label="Stop GTN", style=discord.ButtonStyle.gray)
+    async def stop_gtn(self, interaction, button):
+        await interaction.response.defer()
+        await self.ctx.invoke(bot.get_command("stopgtn"))
+
+    @discord.ui.button(label="Stop QUIZ", style=discord.ButtonStyle.gray)
+    async def stop_quiz(self, interaction, button):
+        await interaction.response.defer()
+        await self.ctx.invoke(bot.get_command("stopquiz"))
+
+
+@bot.command()
+@has_game_role()
+async def stopgame(ctx):
+    embed = embed_msg("🛑 Stop Game Panel", "Click a game to stop it")
+    await ctx.send(embed=embed, view=StopGameView(ctx))
+
+
+# ---------- LEADERBOARD PANEL ----------
+class LBView(View):
+    def __init__(self, ctx):
+        super().__init__(timeout=60)
+        self.ctx = ctx
+
+    @discord.ui.button(label="MCLINES LB", style=discord.ButtonStyle.green)
+    async def mc(self, interaction, button):
+        await interaction.response.defer()
+        await self.ctx.invoke(bot.get_command("lbmclines"))
+
+    @discord.ui.button(label="GTN LB", style=discord.ButtonStyle.blurple)
+    async def gtn(self, interaction, button):
+        await interaction.response.defer()
+        await self.ctx.invoke(bot.get_command("lbgtn"))
+
+    @discord.ui.button(label="QUIZ LB", style=discord.ButtonStyle.red)
+    async def quiz(self, interaction, button):
+        await interaction.response.defer()
+        await self.ctx.invoke(bot.get_command("lbquiz"))
+
+
+@bot.command()
+async def lb(ctx):
+    embed = embed_msg("🏆 Leaderboards", "Select leaderboard to view")
+    await ctx.send(embed=embed, view=LBView(ctx))
+
+
+# ---------- CLEAR LB PANEL ----------
+class ClearLBConfirm(View):
+    def __init__(self, ctx, cmd):
+        super().__init__(timeout=30)
+        self.ctx = ctx
+        self.cmd = cmd
+
+    async def interaction_check(self, interaction):
+        return any(r.id == GAME_MANAGER_ROLE_ID for r in interaction.user.roles)
+
+    @discord.ui.button(label="CONFIRM CLEAR", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction, button):
+        await interaction.response.defer()
+        await self.ctx.invoke(bot.get_command(self.cmd))
+
+
+class ClearLBView(View):
+    def __init__(self, ctx):
+        super().__init__(timeout=60)
+        self.ctx = ctx
+
+    async def interaction_check(self, interaction):
+        return any(r.id == GAME_MANAGER_ROLE_ID for r in interaction.user.roles)
+
+    @discord.ui.button(label="Clear MCLINES", style=discord.ButtonStyle.gray)
+    async def mc(self, interaction, button):
+        await interaction.response.send_message(
+            embed=embed_msg("⚠️ Confirm", "Clear MCLINES leaderboard?"),
+            view=ClearLBConfirm(self.ctx, "clearlbmclines"),
+            ephemeral=True
+        )
+
+    @discord.ui.button(label="Clear GTN", style=discord.ButtonStyle.gray)
+    async def gtn(self, interaction, button):
+        await interaction.response.send_message(
+            embed=embed_msg("⚠️ Confirm", "Clear GTN leaderboard?"),
+            view=ClearLBConfirm(self.ctx, "clearlbgtn"),
+            ephemeral=True
+        )
+
+    @discord.ui.button(label="Clear QUIZ", style=discord.ButtonStyle.gray)
+    async def quiz(self, interaction, button):
+        await interaction.response.send_message(
+            embed=embed_msg("⚠️ Confirm", "Clear QUIZ leaderboard?"),
+            view=ClearLBConfirm(self.ctx, "clearquizlb"),
+            ephemeral=True
+        )
+
+
+@bot.command()
+@has_game_role()
+async def clearlb(ctx):
+    embed = embed_msg("🧹 Clear Leaderboards", "Select leaderboard to wipe")
+    await ctx.send(embed=embed, view=ClearLBView(ctx))
+
 bot.run(TOKEN)
+
 
 
 
