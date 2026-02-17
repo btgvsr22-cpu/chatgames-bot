@@ -565,157 +565,100 @@ async def bulkpointsquiz(ctx, amount:int):
         f"Added **{amount}** quiz points to everyone."
     ))
 
-# ================= UI GAME CONTROL PANEL =================
-from discord.ui import View, Button
+# ================= UI GAME CONTROL PANEL (DROPDOWNS) =================
+from discord.ui import View, Select, Button
 
-# ---------- START GAME PANEL ----------
-class StartGameView(View):
-    def __init__(self, ctx):
-        super().__init__(timeout=60)
+class GameControlDropdown(Select):
+    def __init__(self, mode, ctx):
+        self.mode = mode
         self.ctx = ctx
+        options = [
+            discord.SelectOption(label="MCLINES", description="Unscramble sentences", emoji="🎮"),
+            discord.SelectOption(label="GTN", description="Guess the number", emoji="🎯"),
+            discord.SelectOption(label="QUIZ", description="Minecraft Trivia", emoji="🧠"),
+        ]
+        super().__init__(placeholder=f"Choose a game to {mode}...", options=options)
 
-    async def interaction_check(self, interaction):
-        return any(r.id == GAME_MANAGER_ROLE_ID for r in interaction.user.roles)
-
-    @discord.ui.button(label="MCLINES", style=discord.ButtonStyle.green)
-    async def mclines(self, interaction, button):
+    async def callback(self, interaction: discord.Interaction):
+        if not any(r.id == GAME_MANAGER_ROLE_ID for r in interaction.user.roles):
+            return await interaction.response.send_message("❌ No Permission", ephemeral=True)
+        
+        game = self.values[0].lower()
+        # Mapping selection to your existing command names
+        start_cmds = {"mclines": "startmcline", "gtn": "srtgtn", "quiz": "startquiz"}
+        stop_cmds = {"mclines": "stopmcline", "gtn": "stopgtn", "quiz": "stopquiz"}
+        
+        target_cmd = start_cmds[game] if self.mode == "start" else stop_cmds[game]
+        
         await interaction.response.defer()
-        await self.ctx.invoke(bot.get_command("startmcline"))
+        await self.ctx.invoke(bot.get_command(target_cmd))
 
-    @discord.ui.button(label="GTN", style=discord.ButtonStyle.blurple)
-    async def gtn(self, interaction, button):
-        await interaction.response.defer()
-        await self.ctx.invoke(bot.get_command("srtgtn"))
-
-    @discord.ui.button(label="QUIZ", style=discord.ButtonStyle.red)
-    async def quiz(self, interaction, button):
-        await interaction.response.defer()
-        await self.ctx.invoke(bot.get_command("startquiz"))
-
-
+# ---------- START / STOP / LB PANELS ----------
 @bot.command()
 @has_game_role()
 async def srtgame(ctx):
-    embed = embed_msg("🎮 Start Game Panel", "Click a game to start it")
-    await ctx.send(embed=embed, view=StartGameView(ctx))
-
-
-# ---------- STOP GAME PANEL ----------
-class StopGameView(View):
-    def __init__(self, ctx):
-        super().__init__(timeout=60)
-        self.ctx = ctx
-
-    async def interaction_check(self, interaction):
-        return any(r.id == GAME_MANAGER_ROLE_ID for r in interaction.user.roles)
-
-    @discord.ui.button(label="Stop MCLINES", style=discord.ButtonStyle.gray)
-    async def stop_mc(self, interaction, button):
-        await interaction.response.defer()
-        await self.ctx.invoke(bot.get_command("stopmcline"))
-
-    @discord.ui.button(label="Stop GTN", style=discord.ButtonStyle.gray)
-    async def stop_gtn(self, interaction, button):
-        await interaction.response.defer()
-        await self.ctx.invoke(bot.get_command("stopgtn"))
-
-    @discord.ui.button(label="Stop QUIZ", style=discord.ButtonStyle.gray)
-    async def stop_quiz(self, interaction, button):
-        await interaction.response.defer()
-        await self.ctx.invoke(bot.get_command("stopquiz"))
-
+    view = View(timeout=60)
+    view.add_item(GameControlDropdown("start", ctx))
+    await ctx.send(embed=embed_msg("🚀 Start Game Panel", "Select a game to launch:"), view=view)
 
 @bot.command()
 @has_game_role()
 async def stopgame(ctx):
-    embed = embed_msg("🛑 Stop Game Panel", "Click a game to stop it")
-    await ctx.send(embed=embed, view=StopGameView(ctx))
-
-
-# ---------- LEADERBOARD PANEL ----------
-class LBView(View):
-    def __init__(self, ctx):
-        super().__init__(timeout=60)
-        self.ctx = ctx
-
-    @discord.ui.button(label="MCLINES LB", style=discord.ButtonStyle.green)
-    async def mc(self, interaction, button):
-        await interaction.response.defer()
-        await self.ctx.invoke(bot.get_command("lbmclines"))
-
-    @discord.ui.button(label="GTN LB", style=discord.ButtonStyle.blurple)
-    async def gtn(self, interaction, button):
-        await interaction.response.defer()
-        await self.ctx.invoke(bot.get_command("lbgtn"))
-
-    @discord.ui.button(label="QUIZ LB", style=discord.ButtonStyle.red)
-    async def quiz(self, interaction, button):
-        await interaction.response.defer()
-        await self.ctx.invoke(bot.get_command("lbquiz"))
-
+    view = View(timeout=60)
+    view.add_item(GameControlDropdown("stop", ctx))
+    await ctx.send(embed=embed_msg("🛑 Stop Game Panel", "Select a game to end:"), view=view)
 
 @bot.command()
 async def lb(ctx):
-    embed = embed_msg("🏆 Leaderboards", "Select leaderboard to view")
-    await ctx.send(embed=embed, view=LBView(ctx))
+    class LBDropdown(Select):
+        def __init__(self):
+            super().__init__(placeholder="Select Leaderboard...", options=[
+                discord.SelectOption(label="MCLINES", emoji="🏆"),
+                discord.SelectOption(label="GTN", emoji="🎯"),
+                discord.SelectOption(label="QUIZ", emoji="🧠"),
+            ])
+        async def callback(self, interaction):
+            await interaction.response.defer()
+            cmd = {"MCLINES": "lbmclines", "GTN": "lbgtn", "QUIZ": "lbquiz"}[self.values[0]]
+            await ctx.invoke(bot.get_command(cmd))
 
+    view = View(); view.add_item(LBDropdown())
+    await ctx.send(embed=embed_msg("📊 Leaderboards", "Select a board to view:"), view=view)
 
-# ---------- CLEAR LB PANEL ----------
-class ClearLBConfirm(View):
-    def __init__(self, ctx, cmd):
+# ---------- CLEAR LB WITH WARNING ----------
+class ConfirmClear(View):
+    def __init__(self, table, display_name):
         super().__init__(timeout=30)
-        self.ctx = ctx
-        self.cmd = cmd
+        self.table = table
+        self.display_name = display_name
 
-    async def interaction_check(self, interaction):
-        return any(r.id == GAME_MANAGER_ROLE_ID for r in interaction.user.roles)
-
-    @discord.ui.button(label="CONFIRM CLEAR", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="⚠️ YES, WIPE DATA", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction, button):
-        await interaction.response.defer()
-        await self.ctx.invoke(bot.get_command(self.cmd))
-
-
-class ClearLBView(View):
-    def __init__(self, ctx):
-        super().__init__(timeout=60)
-        self.ctx = ctx
-
-    async def interaction_check(self, interaction):
-        return any(r.id == GAME_MANAGER_ROLE_ID for r in interaction.user.roles)
-
-    @discord.ui.button(label="Clear MCLINES", style=discord.ButtonStyle.gray)
-    async def mc(self, interaction, button):
-        await interaction.response.send_message(
-            embed=embed_msg("⚠️ Confirm", "Clear MCLINES leaderboard?"),
-            view=ClearLBConfirm(self.ctx, "clearlbmclines"),
-            ephemeral=True
-        )
-
-    @discord.ui.button(label="Clear GTN", style=discord.ButtonStyle.gray)
-    async def gtn(self, interaction, button):
-        await interaction.response.send_message(
-            embed=embed_msg("⚠️ Confirm", "Clear GTN leaderboard?"),
-            view=ClearLBConfirm(self.ctx, "clearlbgtn"),
-            ephemeral=True
-        )
-
-    @discord.ui.button(label="Clear QUIZ", style=discord.ButtonStyle.gray)
-    async def quiz(self, interaction, button):
-        await interaction.response.send_message(
-            embed=embed_msg("⚠️ Confirm", "Clear QUIZ leaderboard?"),
-            view=ClearLBConfirm(self.ctx, "clearquizlb"),
-            ephemeral=True
-        )
-
+        c.execute(f"DELETE FROM {self.table}")
+        conn.commit()
+        await interaction.response.edit_message(content=f"✅ **{self.display_name}** leaderboard has been wiped.", embed=None, view=None)
 
 @bot.command()
 @has_game_role()
 async def clearlb(ctx):
-    embed = embed_msg("🧹 Clear Leaderboards", "Select leaderboard to wipe")
-    await ctx.send(embed=embed, view=ClearLBView(ctx))
+    class ClearDropdown(Select):
+        def __init__(self):
+            super().__init__(placeholder="Select Leaderboard to RESET...", options=[
+                discord.SelectOption(label="MCLINES", value="points"),
+                discord.SelectOption(label="GTN", value="gtn_points"),
+                discord.SelectOption(label="QUIZ", value="quiz_points"),
+            ])
+        async def callback(self, interaction):
+            display = next(o.label for o in self.options if o.value == self.values[0])
+            view = ConfirmClear(self.values[0], display)
+            await interaction.response.send_message(
+                embed=embed_msg("🚨 FINAL WARNING", f"Are you sure you want to delete all **{display}** scores?\nThis cannot be undone.", discord.Color.red()),
+                view=view, ephemeral=True)
 
+    view = View(); view.add_item(ClearDropdown())
+    await ctx.send(embed=embed_msg("🧹 Reset System", "Select a board to initiate wipe:"), view=view)
 bot.run(TOKEN)
+
 
 
 
