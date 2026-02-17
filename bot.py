@@ -8,7 +8,7 @@ import time
 
 # ================= CONFIG =================
 TOKEN = os.getenv("DISCORD_TOKEN")
-GAME_MANAGER_ROLE_ID = 1468173295760314473
+GAME_MANAGER_ROLE_ID = 1473304192641794169
 OWNER_ID = 1448709644091527363
 DB_FILE = "/data/bot_data.db"
 
@@ -715,6 +715,7 @@ async def clearlb(ctx):
     await ctx.send(embed=embed, view=ClearLBView(ctx))
 
 bot.run(TOKEN)
+
 
 
 
