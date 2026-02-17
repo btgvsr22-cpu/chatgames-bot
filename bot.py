@@ -668,3 +668,5 @@ async def clearlb(ctx):
 
     view = View(); view.add_item(ClearDropdown())
     await ctx.send(embed=embed_msg("🧹 Reset System", "Initiate a wipe (One-use):"), view=view)
+    bot.run(TOKEN)
+
