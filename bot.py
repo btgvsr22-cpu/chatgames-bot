@@ -565,7 +565,7 @@ async def bulkpointsquiz(ctx, amount:int):
         f"Added **{amount}** quiz points to everyone."
     ))
 
-# ================= UI GAME CONTROL PANEL (DROPDOWNS) =================
+# ================= UI GAME CONTROL PANEL (ONE-USE) =================
 from discord.ui import View, Select, Button
 
 class GameControlDropdown(Select):
@@ -583,14 +583,17 @@ class GameControlDropdown(Select):
         if not any(r.id == GAME_MANAGER_ROLE_ID for r in interaction.user.roles):
             return await interaction.response.send_message("❌ No Permission", ephemeral=True)
         
+        # --- ONE-USE LOGIC ---
+        self.disabled = True  # Grey out the dropdown
+        await interaction.response.edit_message(view=self.view) # Update the panel to show it's disabled
+        
         game = self.values[0].lower()
-        # Mapping selection to your existing command names
         start_cmds = {"mclines": "startmcline", "gtn": "srtgtn", "quiz": "startquiz"}
         stop_cmds = {"mclines": "stopmcline", "gtn": "stopgtn", "quiz": "stopquiz"}
         
         target_cmd = start_cmds[game] if self.mode == "start" else stop_cmds[game]
         
-        await interaction.response.defer()
+        # Invoke the actual command
         await self.ctx.invoke(bot.get_command(target_cmd))
 
 # ---------- START / STOP / LB PANELS ----------
@@ -599,31 +602,33 @@ class GameControlDropdown(Select):
 async def srtgame(ctx):
     view = View(timeout=60)
     view.add_item(GameControlDropdown("start", ctx))
-    await ctx.send(embed=embed_msg("🚀 Start Game Panel", "Select a game to launch:"), view=view)
+    await ctx.send(embed=embed_msg("🚀 Start Game Panel", "Select a game (One-use only):"), view=view)
 
 @bot.command()
 @has_game_role()
 async def stopgame(ctx):
     view = View(timeout=60)
     view.add_item(GameControlDropdown("stop", ctx))
-    await ctx.send(embed=embed_msg("🛑 Stop Game Panel", "Select a game to end:"), view=view)
+    await ctx.send(embed=embed_msg("🛑 Stop Game Panel", "Select a game to end (One-use only):"), view=view)
 
 @bot.command()
 async def lb(ctx):
     class LBDropdown(Select):
-        def __init__(self):
+        def __init__(self, original_ctx):
+            self.original_ctx = original_ctx
             super().__init__(placeholder="Select Leaderboard...", options=[
                 discord.SelectOption(label="MCLINES", emoji="🏆"),
                 discord.SelectOption(label="GTN", emoji="🎯"),
                 discord.SelectOption(label="QUIZ", emoji="🧠"),
             ])
         async def callback(self, interaction):
-            await interaction.response.defer()
+            self.disabled = True # One-use
+            await interaction.response.edit_message(view=self.view)
             cmd = {"MCLINES": "lbmclines", "GTN": "lbgtn", "QUIZ": "lbquiz"}[self.values[0]]
-            await ctx.invoke(bot.get_command(cmd))
+            await self.original_ctx.invoke(bot.get_command(cmd))
 
-    view = View(); view.add_item(LBDropdown())
-    await ctx.send(embed=embed_msg("📊 Leaderboards", "Select a board to view:"), view=view)
+    view = View(); view.add_item(LBDropdown(ctx))
+    await ctx.send(embed=embed_msg("📊 Leaderboards", "Select a board (One-use only):"), view=view)
 
 # ---------- CLEAR LB WITH WARNING ----------
 class ConfirmClear(View):
@@ -634,9 +639,11 @@ class ConfirmClear(View):
 
     @discord.ui.button(label="⚠️ YES, WIPE DATA", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction, button):
+        # Disable button after click
+        button.disabled = True
         c.execute(f"DELETE FROM {self.table}")
         conn.commit()
-        await interaction.response.edit_message(content=f"✅ **{self.display_name}** leaderboard has been wiped.", embed=None, view=None)
+        await interaction.response.edit_message(content=f"✅ **{self.display_name}** leaderboard wiped.", embed=None, view=None)
 
 @bot.command()
 @has_game_role()
@@ -649,25 +656,15 @@ async def clearlb(ctx):
                 discord.SelectOption(label="QUIZ", value="quiz_points"),
             ])
         async def callback(self, interaction):
+            self.disabled = True # One-use
             display = next(o.label for o in self.options if o.value == self.values[0])
             view = ConfirmClear(self.values[0], display)
-            await interaction.response.send_message(
-                embed=embed_msg("🚨 FINAL WARNING", f"Are you sure you want to delete all **{display}** scores?\nThis cannot be undone.", discord.Color.red()),
+            # Update original message to show dropdown is used
+            await interaction.response.edit_message(view=self.view)
+            # Send the secret confirmation button
+            await interaction.followup.send(
+                embed=embed_msg("🚨 FINAL WARNING", f"Wipe all **{display}** scores?", discord.Color.red()),
                 view=view, ephemeral=True)
 
     view = View(); view.add_item(ClearDropdown())
-    await ctx.send(embed=embed_msg("🧹 Reset System", "Select a board to initiate wipe:"), view=view)
-bot.run(TOKEN)
-
-
-
-
-
-
-
-
-
-
-
-
-
+    await ctx.send(embed=embed_msg("🧹 Reset System", "Initiate a wipe (One-use):"), view=view)
