@@ -117,13 +117,19 @@ def add_gtn_point(user_id, amount=1):
     conn.commit()
     return new_score
 
-# ================= ALLOWED ADMIN & SETUP COMMANDS =================
-
+# ================= ADMIN COMMANDS =================
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def givepointsmc(ctx, member: discord.Member, amount: int):
     s = add_point(member.id, amount)
     await ctx.send(f"✅ Added {amount} MC points to {member.mention}. Total: {s}")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def bulkpointsmc(ctx, amount: int):
+    c.execute("UPDATE points SET score = score + ?", (amount,))
+    conn.commit()
+    await ctx.send(f"📈 Added {amount} MC points to EVERYONE in the database.")
 
 @bot.command()
 @commands.has_permissions(administrator=True)
@@ -133,169 +139,23 @@ async def givepointsgtn(ctx, member: discord.Member, amount: int):
 
 @bot.command()
 @commands.has_permissions(administrator=True)
-async def givepointsquiz(ctx, member: discord.Member, amount: int):
-    s = add_quiz_point(member.id, amount)
-    await ctx.send(f"🧠 Added {amount} Quiz points to {member.mention}. Total: {s}")
-
-@bot.command()
-@has_game_role()
-async def setmclines(ctx, channel: discord.TextChannel):
-    c.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("game_channel", str(channel.id)))
+async def bulkpointsgtn(ctx, amount: int):
+    c.execute("UPDATE gtn_points SET score = score + ?", (amount,))
     conn.commit()
-    await ctx.send(embed=embed_msg("🎮 MCLINES Channel Set", f"{channel.mention}"))
+    await ctx.send(f"📈 Added {amount} GTN points to EVERYONE in the database.")
 
 @bot.command()
-@has_game_role()
-async def setgtn(ctx, channel: discord.TextChannel):
-    c.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("gtn_channel", str(channel.id)))
-    conn.commit()
-    await ctx.send(embed=embed_msg("🎯 GTN Channel Set", f"{channel.mention}"))
+@commands.has_permissions(administrator=True)
+async def removepointsmc(ctx, member: discord.Member, amount: int):
+    s = add_point(member.id, -amount)
+    await ctx.send(f"❌ Removed {amount} MC points from {member.mention}.")
 
 @bot.command()
-@has_game_role()
-async def setquiz(ctx, channel: discord.TextChannel):
-    global quiz_channel_id
-    quiz_channel_id = channel.id
-    await ctx.send(embed=embed_msg("🧠 Quiz Channel Set", channel.mention))
+@commands.has_permissions(administrator=True)
+async def removepointsgtn(ctx, member: discord.Member, amount: int):
+    s = add_gtn_point(member.id, -amount)
+    await ctx.send(f"❌ Removed {amount} GTN points from {member.mention}.")
 
-# ================= INTERNAL FUNCTIONS (NOT ACCESSIBLE VIA CHAT) =================
-
-async def run_start_mcline(ctx):
-    global game_running, current_answer
-    ok, running = start_game_lock("MCLINES")
-    if not ok: return await ctx.send(f"⚠️ {running} is already running!")
-    c.execute("SELECT value FROM config WHERE key = ?", ("game_channel",))
-    row = c.fetchone()
-    if not row: 
-        stop_game_lock()
-        return await ctx.send("❌ Set channel first.")
-    channel = bot.get_channel(int(row[0]))
-    current_answer = random.choice(sentences)
-    game_running = True
-    await channel.send(embed=embed_msg("🎮 Unscramble", f"**{reverse_sentence(current_answer)}**"))
-
-async def run_start_gtn(ctx):
-    global gtn_running, gtn_number, gtn_low, gtn_high, gtn_channel_id
-    ok, running = start_game_lock("GTN")
-    if not ok: return await ctx.send(f"⚠️ {running} is already running!")
-    c.execute("SELECT value FROM config WHERE key = ?", ("gtn_channel",))
-    row = c.fetchone()
-    if row: gtn_channel_id = int(row[0])
-    if not gtn_channel_id:
-        stop_game_lock()
-        return await ctx.send("❌ Set channel first.")
-    gtn_running, gtn_number, gtn_low, gtn_high = True, random.randint(0, 1000), 0, 1000
-    await (bot.get_channel(gtn_channel_id)).send(embed=embed_msg("🎯 GTN Started!", "Guess the number!"))
-
-async def run_start_quiz(ctx):
-    global quiz_running, quiz_answer
-    ok, running = start_game_lock("Quiz")
-    if not ok: return await ctx.send(f"⚠️ {running} is already running!")
-    if not quiz_channel_id:
-        stop_game_lock()
-        return await ctx.send("❌ Set channel first.")
-    quiz_running = True
-    q = random.choice(quiz_questions)
-    quiz_answer = q[1]
-    await bot.get_channel(quiz_channel_id).send(embed=embed_msg("🧠 Minecraft Quiz", q[0]))
-
-# ================= UI PANELS (ONE-USE) =================
-from discord.ui import View, Select
-
-class GameControlDropdown(Select):
-    def __init__(self, mode, ctx):
-        self.mode = mode
-        self.ctx = ctx
-        options = [
-            discord.SelectOption(label="MCLINES", emoji="🎮"),
-            discord.SelectOption(label="GTN", emoji="🎯"),
-            discord.SelectOption(label="QUIZ", emoji="🧠"),
-        ]
-        super().__init__(placeholder=f"Select a game to {mode}...", options=options)
-
-    async def callback(self, interaction: discord.Interaction):
-        if not any(r.id == GAME_MANAGER_ROLE_ID for r in interaction.user.roles):
-            return await interaction.response.send_message("❌ No permission.", ephemeral=True)
-        
-        self.disabled = True 
-        await interaction.response.edit_message(view=self.view)
-        game = self.values[0].lower()
-        
-        if self.mode == "start":
-            if game == "mclines": await run_start_mcline(self.ctx)
-            elif game == "gtn": await run_start_gtn(self.ctx)
-            elif game == "quiz": await run_start_quiz(self.ctx)
-        else:
-            global game_running, gtn_running, quiz_running
-            if game == "mclines": game_running = False
-            elif game == "gtn": gtn_running = False
-            elif game == "quiz": quiz_running = False
-            stop_game_lock()
-            await self.ctx.send(f"🛑 {game.upper()} stopped.")
-
-@bot.command()
-@has_game_role()
-async def srtgame(ctx):
-    view = View(); view.add_item(GameControlDropdown("start", ctx))
-    await ctx.send(embed=embed_msg("🚀 Start Game", "One-use Panel:"), view=view)
-
-@bot.command()
-@has_game_role()
-async def stopgame(ctx):
-    view = View(); view.add_item(GameControlDropdown("stop", ctx))
-    await ctx.send(embed=embed_msg("🛑 Stop Game", "One-use Panel:"), view=view)
-
-@bot.command()
-async def lb(ctx):
-    class LBDropdown(Select):
-        def __init__(self):
-            super().__init__(placeholder="Select Leaderboard...", options=[
-                discord.SelectOption(label="MCLINES", emoji="🏆"),
-                discord.SelectOption(label="GTN", emoji="🎯"),
-                discord.SelectOption(label="QUIZ", emoji="🧠"),
-            ])
-        async def callback(self, interaction):
-            self.disabled = True
-            await interaction.response.edit_message(view=self.view)
-            table = {"MCLINES": "points", "GTN": "gtn_points", "QUIZ": "quiz_points"}[self.values[0]]
-            c.execute(f"SELECT user_id, score FROM {table} ORDER BY score DESC LIMIT 10")
-            rows = c.fetchall()
-            desc = "\n".join([f"**{i+1}.** <@{u}> — {s}" for i, (u, s) in enumerate(rows)])
-            await interaction.followup.send(embed=embed_msg(f"🏆 {self.values[0]} Leaderboard", desc or "Empty"))
-
-    view = View(); view.add_item(LBDropdown())
-    await ctx.send(embed=embed_msg("📊 Leaderboards", "Select one:"), view=view)
-
-class ConfirmClear(View):
-    def __init__(self, table):
-        super().__init__(timeout=30)
-        self.table = table
-    @discord.ui.button(label="⚠️ CONFIRM WIPE", style=discord.ButtonStyle.danger)
-    async def confirm(self, interaction, button):
-        c.execute(f"DELETE FROM {self.table}")
-        conn.commit()
-        await interaction.response.edit_message(content="✅ Data Wiped.", embed=None, view=None)
-
-@bot.command()
-@has_game_role()
-async def clearlb(ctx):
-    class ClearDropdown(Select):
-        def __init__(self):
-            super().__init__(placeholder="WIPE DATA...", options=[
-                discord.SelectOption(label="MCLINES", value="points"),
-                discord.SelectOption(label="GTN", value="gtn_points"),
-                discord.SelectOption(label="QUIZ", value="quiz_points"),
-            ])
-        async def callback(self, interaction):
-            self.disabled = True
-            view = ConfirmClear(self.values[0])
-            await interaction.response.send_message(content="🚨 **Are you sure?**", view=view, ephemeral=True)
-            await interaction.edit_original_response(view=self.view)
-
-    view = View(); view.add_item(ClearDropdown())
-    await ctx.send(embed=embed_msg("🧹 Reset", "Choose board to wipe:"), view=view)
-
-bot.run(TOKEN)
 # ================= MCLINES COMMANDS =================
 @bot.command()
 @has_game_role()
@@ -798,8 +658,6 @@ async def clearlb(ctx):
     view = View(); view.add_item(ClearDropdown())
     await ctx.send(embed=embed_msg("🧹 Reset System", "Select a board to initiate wipe:"), view=view)
 bot.run(TOKEN)
-
-
 
 
 
